@@ -18,17 +18,17 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Matthew Er",
         "role": "Senior Credit Analyst — APAC Market",
-        "photo": "Photo/PHOTO-2025-10-12-12-37-24.jpg",
+        "photo": "Photo/matthew Er .jpg",
     },
     {
         "name": "Inès",
         "role": "Senior Credit Analyst - EMEA Market",
-        "photo": "Photo/IMG_1586.jpg",
+        "photo": "Photo/Ines.jpg",
     },
     {
         "name": "Marie-Gloriseuse Dupont",
         "role": "Senior Credit Analyst - LATAM Market",
-        "photo": "Photo/Capture d’écran . 2025-10-12 à 15.17.36.png",
+        "photo": "Photo/marie.png",
     },
     {
         "name": "Sébastien Lecornue",
@@ -53,7 +53,7 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Aladeen Assad",
         "role": "Compliance Officer",
-        "photo": "Screenshot 2025-10-19 at 06.43.49.png",
+        "photo": "Photo/alaaden.jpeg"  ,
     },
     {
         "name": "Michel Barnier",
