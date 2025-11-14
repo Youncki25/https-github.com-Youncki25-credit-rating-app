@@ -13,12 +13,12 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "BELDJENNA",
         "role": "Senior Credit Analyst — US Market",
-        "photo": "/Users/beldjenna/Desktop/Rating Algo/Photo/Younes Beldjenna Analyste Senior .PNG",
+        "photo": "Photo/Younes Beldjenna Analyste Senior .PNG",
     },
     {
         "name": "Matthew Er",
         "role": "Senior Credit Analyst — APAC Market",
-        "photo": "/Users/beldjenna/Desktop/Rating Algo/Photo/PHOTO-2025-10-12-12-37-24.jpg",
+        "photo": "Photo/Ines.jpg",
     },
     {
         "name": "Inès",
@@ -28,22 +28,22 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Marie-Gloriseuse Dupont",
         "role": "Senior Credit Analyst - LATAM Market",
-        "photo": "/Users/beldjenna/Desktop/Rating Algo/Photo/Capture d’écran . 2025-10-12 à 15.17.36.png",
+        "photo": "Photo/marie.png",
     },
     {
         "name": "Sébastien Lecornue",
         "role": "FX & Macro Analyst",
-        "photo": "/Users/beldjenna/Desktop/Rating Algo/Photo/sebastien.jpeg",
+        "photo": "Photo/sebastien.jpeg",
     },
     {
         "name": "Emmanuel Macron",
         "role": "High Yield Analyst",
-        "photo": "/Users/beldjenna/Desktop/Rating Algo/Photo/manuel.jpeg",
+        "photo": "Photo/manuel.jpeg"
     },
     {
         "name": "Gabriel Attal",
         "role": "Investment Grade Analyst",
-        "photo": "/Users/beldjenna/Desktop/Rating Algo/Photo/Gabriel.jpeg",
+        "photo": "Photo/Gabriel.jpeg",
     },
     {
         "name": "François Bayrou",
@@ -53,12 +53,12 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Aladeen Assad",
         "role": "Compliance Officer",
-        "photo": "/Users/beldjenna/Desktop/Rating Algo/Photo/Screenshot 2025-10-19 at 06.43.49.png",
+        "photo": "Photo/alaaden.jpeg",
     },
     {
         "name": "Michel Barnier",
         "role": "Structured Finance Analyst",
-        "photo": "/Users/beldjenna/Desktop/Rating Algo/Photo/michel.jpeg",
+        "photo": "Photo/michel.jpeg",
     },
 ]
 
