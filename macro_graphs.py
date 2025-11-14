@@ -41,7 +41,7 @@ def render_macro_page():
 
     # --------- Sidebar contrôles ----------
     with st.sidebar:
-        st.markdown("#### ⚙️ Macro – filtres")
+        st.markdown("####  Options des graphiques : ")
         sel_country = st.selectbox("Pays", countries, index=0)
         df = db[sel_country].copy()
 
