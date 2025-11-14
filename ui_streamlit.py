@@ -109,22 +109,20 @@ def _render_profiles_panel():
         st.experimental_rerun()
 
 def _render_page_content(page: str):
-    st.markdown("# 💹  Agence de Notation MIMY")
-    st.caption("Agence de notation transparente et innovante.")
+    st.markdown("# 💹  Calculateur de Note")
+    st.caption("Vous pouvez déterminer la note de crédit d'un émetteur souverain en utilisant notre modèle de notation transparent." \
+    " Cette application vous permet d'explorer les données macroéconomique des pays et d'avoir un point de vue des analystes.")
     st.markdown("---")
 
-
-
     if page == "Présentation":
-        st.markdown("### Data")
+        st.markdown("### Explication du porjet et de l'outil mise à disposition :")
         st.write(
-            "Bonjour, Nous sommes ravie de vous avoir comme client nous somme la premiere agence de notation "
-            "qui note ses clients de manière transparentes. Vous trouverez ci-joint notre modèles de rating et "
-            "les données qui sont utiliser. Vous trouverez également une note des analystes senior accompagné "
-            "de l'étude de l'analyste junior."
-        )
+            "Bonjour,"\
+            "Nous sommes ravis de vous compter parmi nos destinataires. Nous sommes des étudiants et, dans le cadre d’un projet visant à élaborer un modèle de notation d’une entité souveraine, nous avons développé ce calculateur. Les données utilisées sont récupérées via des API : aucune donnée ne provient d’un fichier Excel téléchargé à une date précise. Cela a complexifié notre approche, mais rend l’outil plus régulièrement utilisable."
+            "Dans la section « Modèle », vous trouverez un document détaillant notre approche économétrique ainsi que les limites d’utilisation de notre outil de rating. Vous trouverez également nos coordonnées : nous sommes ouverts à tout retour ou commentaire."
+            )
+        st.write("Nous avons poussé l’analyse un peu plus loin en développant un outil supplémentaire particulièrement intéressant : le calcul de lignes de risque (VaR pour des produits dérivés). Cet outil, couramment utilisé en salle de marché pour mesurer et suivre les expositions, nous a permis d’explorer plus en profondeur les méthodes de gestion du risque. Il était pour nous très instructif de plonger dans ce type d’approche et d’en proposer une mise en pratique concrète au sein de notre projet.")
         st.markdown("[📄 Voir le modèle de rating](https://ton-lien-ici.com)")
-        st.markdown("<br/><span class='badge'>LIVE</span>", unsafe_allow_html=True)
 
     elif page == "Simulation de la note":
         st.markdown("### Simulation de la note")
