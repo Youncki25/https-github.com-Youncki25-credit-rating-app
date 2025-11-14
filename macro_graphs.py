@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-DATA_GLOB = "*_WB_timeseries.xlsx"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_GLOB = os.path.join(BASE_DIR, "*_WB_timeseries.xlsx")
+
 
 @st.cache_data(show_spinner=False)
 def _load_country_timeseries() -> dict[str, pd.DataFrame]:
