@@ -1,4 +1,3 @@
-# macro_graphs.py
 import glob, os
 import numpy as np
 import pandas as pd
@@ -7,10 +6,8 @@ import streamlit as st
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_GLOB = os.path.join(BASE_DIR, "*_WB_timeseries.xlsx")
 
-
 @st.cache_data(show_spinner=False)
 def _load_country_timeseries() -> dict[str, pd.DataFrame]:
-    """Lit chaque <ISO>_WB_timeseries.xlsx -> { 'FRA': DataFrame, ... }"""
     out = {}
     for fp in sorted(glob.glob(DATA_GLOB)):
         iso = os.path.basename(fp).split("_")[0]
@@ -19,22 +16,19 @@ def _load_country_timeseries() -> dict[str, pd.DataFrame]:
         except Exception:
             df = pd.read_excel(fp, index_col=0)
 
-        # normaliser la colonne date -> datetime index
+        # traiter la colonne Date
         if "date" in df.columns:
             df = df.rename(columns={"date": "Date"})
         if "Date" not in df.columns:
-            if df.index.name and df.index.name.lower() == "date":
-                df = df.reset_index().rename(columns={df.index.name: "Date"})
-            else:
-                df = df.rename(columns={df.columns[0]: "Date"})
+            df = df.rename(columns={df.columns[0]: "Date"})
 
         df["Date"] = pd.to_datetime(df["Date"].astype(int), format="%Y")
         df = df.sort_values("Date").set_index("Date")
 
-        # ne garder que les colonnes numériques (indicateurs)
         num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
         out[iso] = df[num_cols]
     return out
+
 
 def render_macro_page():
     st.markdown("### Macroéconomie")
