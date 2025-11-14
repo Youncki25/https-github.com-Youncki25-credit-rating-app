@@ -8,7 +8,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from macro_graphs import render_macro_page
 
-
 try:
     from script import ANALYSTS_CONFIG  # [{name, role, photo}, ...]
 except Exception:
