@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
-# Check si environement ok, sinon ça va pas run
-
+# NE PAS RUN  - SANS CHANGER LES PAYS SINON CA VA KRASH
 import time
 import requests
 import pandas as pd

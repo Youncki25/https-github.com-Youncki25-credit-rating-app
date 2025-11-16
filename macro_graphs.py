@@ -7,37 +7,48 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_GLOB = os.path.join(BASE_DIR, "*_WB_timeseries.xlsx")
 
 @st.cache_data(show_spinner=False)
-def _load_country_timeseries() -> dict[str, pd.DataFrame]:
+def _load_country_timeseries(file_list: tuple[str, ...]) -> dict[str, pd.DataFrame]:
     out = {}
-    for fp in sorted(glob.glob(DATA_GLOB)):
+    for fp in file_list:
         iso = os.path.basename(fp).split("_")[0]
+
+        # lecture Excel
         try:
             df = pd.read_excel(fp)
         except Exception:
             df = pd.read_excel(fp, index_col=0)
 
-        # traiter la colonne Date
+        # --- colonne Date ---
         if "date" in df.columns:
             df = df.rename(columns={"date": "Date"})
-        if "Date" not in df.columns:
+        elif "Date" not in df.columns:
             df = df.rename(columns={df.columns[0]: "Date"})
 
-        df["Date"] = pd.to_datetime(df["Date"].astype(int), format="%Y")
-        df = df.sort_values("Date").set_index("Date")
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"]).sort_values("Date").set_index("Date")
+
+        # --- forcer toutes les colonnes en numérique ---
+        for c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
 
         num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
         out[iso] = df[num_cols]
+
     return out
 
 
 def render_macro_page():
     st.markdown("### Macroéconomie")
-    db = _load_country_timeseries()
+
+    file_list = tuple(sorted(glob.glob(DATA_GLOB)))
+    db = _load_country_timeseries(file_list)
+
     if not db:
         st.error("Aucun fichier `*_WB_timeseries.xlsx` trouvé.")
         return
 
     countries = sorted(db.keys())
+    st.caption(f"{len(countries)} pays chargés : {', '.join(countries)}")  # debug utile
 
     # --------- Sidebar contrôles ----------
     with st.sidebar:
@@ -67,8 +78,7 @@ def render_macro_page():
         first = df.dropna().iloc[0]
         df = (df / first) * 100
 
-    # --------- Graphiques : un graphe par variable ----------
-    st.markdown(f"#### {sel_country} — indicateurs")
+    st.markdown(f"#### {sel_country} — indicateurs ({len(df.columns)} variables)")
     if df.empty or not len(df.columns):
         st.info("Pas de données sur cette période.")
         return
