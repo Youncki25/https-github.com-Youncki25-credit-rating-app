@@ -1,18 +1,16 @@
 import glob, os
-import numpy as np
 import pandas as pd
 import streamlit as st
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_GLOB = os.path.join(BASE_DIR, "*_WB_timeseries.xlsx")
 
-#@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False)
 def _load_country_timeseries(file_list: tuple[str, ...]) -> dict[str, pd.DataFrame]:
     out = {}
     for fp in file_list:
         iso = os.path.basename(fp).split("_")[0]
 
-        # lecture Excel
         try:
             df = pd.read_excel(fp)
         except Exception:
@@ -27,7 +25,7 @@ def _load_country_timeseries(file_list: tuple[str, ...]) -> dict[str, pd.DataFra
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.dropna(subset=["Date"]).sort_values("Date").set_index("Date")
 
-        # --- forcer toutes les colonnes en numérique ---
+        # forcer toutes les colonnes en numérique
         for c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
@@ -35,6 +33,7 @@ def _load_country_timeseries(file_list: tuple[str, ...]) -> dict[str, pd.DataFra
         out[iso] = df[num_cols]
 
     return out
+
 
 def render_macro_page():
     st.markdown("### Macroéconomie")
@@ -48,55 +47,61 @@ def render_macro_page():
 
     countries = sorted(db.keys())
 
-    # --------- Sidebar contrôles ----------
+    # --------- Sidebar : choix du pays d'abord ----------
     with st.sidebar:
         st.markdown("####  Options des graphiques : ")
         sel_country = st.selectbox("Pays", countries, index=0)
 
-    # On récupère le DF après le selectbox
     df = db[sel_country].copy()
 
-    # 🔴 1) Si pas de données -> on sort proprement
-    if df.empty or df.index.empty:
-        st.info(f"Pas de données disponibles pour {sel_country}.")
+    if df.empty:
+        st.info(f"Pas de données pour {sel_country}.")
+        return
+
+    # s'assurer qu'on a bien un DatetimeIndex
+    if not isinstance(df.index, pd.DatetimeIndex):
+        st.error(f"Index de dates invalide pour {sel_country}.")
         return
 
     df = df.sort_index()
 
-    # 🔴 2) Si pas de dates valides -> on sort
-    if not isinstance(df.index, pd.DatetimeIndex):
-        st.error(f"Index de dates manquant ou invalide pour {sel_country}.")
+    # --- années disponibles ---
+    years = df.index.year
+    years = years[~pd.isna(years)]
+
+    if years.empty:
+        st.info(f"Aucune année valide pour {sel_country}.")
         return
 
-    min_d, max_d = df.index.min(), df.index.max()
-    if pd.isna(min_d) or pd.isna(max_d):
-        st.info(f"Dates indisponibles pour {sel_country}.")
-        return
+    y_min = int(years.min())
+    y_max = int(years.max())
 
-    # 🔴 3) Cas spécial : une seule année dispo -> pas de slider range
-    if min_d == max_d:
-        start = end = min_d.to_pydatetime()
-        st.caption(f"Période disponible : uniquement {min_d.year}.")
-    else:
-        with st.sidebar:
-            start, end = st.slider(
-                "Période",
-                min_value=min_d.to_pydatetime(),
-                max_value=max_d.to_pydatetime(),
-                value=(min_d.to_pydatetime(), max_d.to_pydatetime()),
-                format="%Y",
+    # --------- Slider sur les ANNÉES (ints) ----------
+    with st.sidebar:
+        if y_min == y_max:
+            st.caption(f"Période disponible : {y_min} uniquement.")
+            start_year = end_year = y_min
+        else:
+            start_year, end_year = st.slider(
+                "Période (année)",
+                min_value=y_min,
+                max_value=y_max,
+                value=(y_min, y_max),
+                step=1,
             )
-            rolling = st.number_input("Moyenne mobile (années)", 1, 10, 1, 1)
-            normalize = st.checkbox("Indexer à 100 au début de la période", value=False)
-            show_table = st.checkbox("Afficher le tableau sous les graphes", value=False)
+
+        rolling = st.number_input("Moyenne mobile (années)", 1, 10, 1, 1)
+        normalize = st.checkbox("Indexer à 100 au début de la période", value=False)
+        show_table = st.checkbox("Afficher le tableau sous les graphes", value=False)
 
     # --------- Filtrage & transformations ----------
-    df = df.loc[(df.index >= pd.Timestamp(start)) & (df.index <= pd.Timestamp(end))]
+    mask = (df.index.year >= start_year) & (df.index.year <= end_year)
+    df = df.loc[mask]
 
-    if 'rolling' in locals() and rolling and rolling > 1:
+    if rolling and rolling > 1:
         df = df.sort_index().rolling(rolling).mean()
 
-    if 'normalize' in locals() and normalize:
+    if normalize:
         first = df.dropna().iloc[0]
         df = (df / first) * 100
 
@@ -109,5 +114,5 @@ def render_macro_page():
         st.markdown(f"**{col}**")
         st.line_chart(df[[col]].rename(columns={col: sel_country}), height=300)
 
-        if 'show_table' in locals() and show_table:
+        if show_table:
             st.dataframe(df[[col]].rename(columns={col: sel_country}).round(3))
