@@ -6,7 +6,7 @@ import streamlit as st
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_GLOB = os.path.join(BASE_DIR, "*_WB_timeseries.xlsx")
 
-@st.cache_data(show_spinner=False)
+#@st.cache_data(show_spinner=False)
 def _load_country_timeseries(file_list: tuple[str, ...]) -> dict[str, pd.DataFrame]:
     out = {}
     for fp in file_list:
