@@ -18,6 +18,7 @@ WB_INDICATORS = {
     "Unemployment (% labor force)": "SL.UEM.TOTL.ZS",
     "Interest payments (% of GDP)": "GC.XPN.INTP.ZS",
     "Tax revenue (% of GDP)": "GC.TAX.TOTL.GD.ZS",
+    "Net lending/borrowing (% of GDP)": "GC.DOD.TOTL.GD.ZS",
 }
 
 def make_session():
