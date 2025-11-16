@@ -10,7 +10,7 @@ from urllib3.util.retry import Retry
 COUNTRIES = ["FRA", "ARG","ZAF", "EGY", "VNM","MEX","IND","CAN","DEU","JPN"]    # pays 
 YEARS = "2000:2024"                      
 
-
+# fiscal, dette, déficit, inflation, balance commercial ( à ajouter)
 # voir les données  (trouver des facteurs), récup des fichier sur la croissance, inflation, Fiscal balance (revenus -dépenses), mettre une indicatrice sur le défault précédent ( c'est une idée on verra), indicatrice si c'est un pays industriel ou en développement, Ratings
 WB_INDICATORS = {
     "GDP growth (annual %)": "NY.GDP.MKTP.KD.ZG",
