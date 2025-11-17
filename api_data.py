@@ -1,4 +1,5 @@
 # API – US FRED (dette & ratios sur PIB)
+# inutile- à check 
 from fredapi import Fred
 import pandas as pd
 import matplotlib.pyplot as plt
