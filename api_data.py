@@ -139,4 +139,4 @@ for col, title, fname, ylabel in plots:
     plt.savefig(fname, dpi=150)
     plt.close()
 
-print("✅ Graphiques enregistrés :", ", ".join([p[2] for p in plots if p[0] in debu
+print("✅ Graphiques enregistrés :", ", ".join([p[2] for p in plots if p[0] in debut_periode.columns]))
