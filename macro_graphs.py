@@ -16,7 +16,6 @@ def _load_country_timeseries(file_list: tuple[str, ...]) -> dict[str, pd.DataFra
         except Exception:
             df = pd.read_excel(fp, index_col=0)
 
-        # --- colonne Date ---
         if "date" in df.columns:
             df = df.rename(columns={"date": "Date"})
         elif "Date" not in df.columns:
@@ -25,7 +24,6 @@ def _load_country_timeseries(file_list: tuple[str, ...]) -> dict[str, pd.DataFra
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.dropna(subset=["Date"]).sort_values("Date").set_index("Date")
 
-        # forcer toutes les colonnes en numérique
         for c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
@@ -47,36 +45,48 @@ def render_macro_page():
 
     countries = sorted(db.keys())
 
-    # --------- Sidebar : choix du pays d'abord ----------
+    # --------- Choix du pays ----------
     with st.sidebar:
         st.markdown("####  Options des graphiques : ")
         sel_country = st.selectbox("Pays", countries, index=0)
 
     df = db[sel_country].copy()
-
     if df.empty:
         st.info(f"Pas de données pour {sel_country}.")
         return
 
-    # s'assurer qu'on a bien un DatetimeIndex
     if not isinstance(df.index, pd.DatetimeIndex):
         st.error(f"Index de dates invalide pour {sel_country}.")
         return
 
     df = df.sort_index()
 
-    # --- années disponibles ---
+    # --------- Années disponibles ----------
     years = df.index.year
     years = years[~pd.isna(years)]
-
     if years.empty:
         st.info(f"Aucune année valide pour {sel_country}.")
         return
 
-    y_min = int(years.min())
-    y_max = int(years.max())
+    # Fenêtre cible
+    TARGET_MIN, TARGET_MAX = 2000, 2024
 
-    # --------- Slider sur les ANNÉES (ints) ----------
+    # Années dispo dans la fenêtre 2000–2024
+    years_2000_2024 = years[(years >= TARGET_MIN) & (years <= TARGET_MAX)]
+
+    if not years_2000_2024.empty:
+        y_min = int(years_2000_2024.min())
+        y_max = int(years_2000_2024.max())
+    else:
+        # si aucun point entre 2000 et 2024, on affiche toute la série
+        y_min = int(years.min())
+        y_max = int(years.max())
+        st.caption(
+            f"Aucune donnée entre 2000 et 2024 pour {sel_country}. "
+            f"Affichage de la série complète ({y_min}–{y_max})."
+        )
+
+    # --------- Slider sur les années ----------
     with st.sidebar:
         if y_min == y_max:
             st.caption(f"Période disponible : {y_min} uniquement.")
@@ -86,7 +96,7 @@ def render_macro_page():
                 "Période (année)",
                 min_value=y_min,
                 max_value=y_max,
-                value=(y_min, y_max),
+                value=(max(y_min, TARGET_MIN), min(y_max, TARGET_MAX)),
                 step=1,
             )
 
@@ -101,7 +111,7 @@ def render_macro_page():
     if rolling and rolling > 1:
         df = df.sort_index().rolling(rolling).mean()
 
-    if normalize:
+    if normalize and not df.dropna().empty:
         first = df.dropna().iloc[0]
         df = (df / first) * 100
 
