@@ -75,3 +75,5 @@ df_mean["rating_mean_txt"] = df_mean["rating_mean_num"].round().map(inv_sp_fitch
 
 print(df_mean.head())
 
+df_france_mean = df_mean[df_mean["Country"] == "France"]
+print(df_france_mean)
