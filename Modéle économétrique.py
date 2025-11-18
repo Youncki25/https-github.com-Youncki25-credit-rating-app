@@ -4,8 +4,10 @@ import os
 import glob
 import numpy as np
 import pandas as pd
-
 from statsmodels.miscmodels.ordinal_model import OrderedModel
+
+
+
 
 
 # ================================
@@ -91,9 +93,7 @@ def load_wb_panel(base_dir):
     return wb_panel
 
 
-# ================================
-# 2) LOAD RATINGS MOYENS (Ratings.xlsx)
-# ================================
+#ratings
 
 def load_ratings(path):
 
@@ -109,11 +109,19 @@ def load_ratings(path):
     xls = pd.ExcelFile(path)
     print("→ Feuilles trouvées :", xls.sheet_names)
 
-    if "Ratings" not in xls.sheet_names:
-        raise ValueError("❌ Feuille 'Ratings' introuvable dans Ratings.xlsx")
+    # --- Choix intelligent de la feuille ---
+    if "Ratings" in xls.sheet_names:
+        sheet_name = "Ratings"
+    elif "Sheet1" in xls.sheet_names:
+        sheet_name = "Sheet1"
+        print("⚠️ Feuille 'Ratings' absente, utilisation de 'Sheet1'.")
+    else:
+        # on prend la première feuille par défaut
+        sheet_name = xls.sheet_names[0]
+        print(f"⚠️ Ni 'Ratings' ni 'Sheet1' trouvées, utilisation de '{sheet_name}'.")
 
-    print("→ Lecture de la feuille 'Ratings'...")
-    df_rat = pd.read_excel(path, sheet_name="Ratings")
+    print(f"→ Lecture de la feuille '{sheet_name}'...")
+    df_rat = pd.read_excel(path, sheet_name=sheet_name)
     print("✔️ Lecture Ratings OK")
     print("✔️ Colonnes Ratings :", df_rat.columns.tolist())
     print(df_rat.head())
@@ -132,21 +140,22 @@ def load_ratings(path):
             df_rat = df_rat.rename(columns={"mean_rating": "rating_mean_num"})
             print("→ Colonne 'mean_rating' renommée en 'rating_mean_num'")
         else:
-            raise ValueError("❌ Ni 'rating_mean_num' ni 'mean_rating' trouvées dans Ratings.xlsx")
+            raise ValueError(
+                "❌ Ni 'rating_mean_num' ni 'mean_rating' trouvées dans Ratings.xlsx"
+            )
 
     # Conversion Year en int
     df_rat["Year"] = pd.to_numeric(df_rat["Year"], errors="coerce")
     df_rat = df_rat.dropna(subset=["Year"]).copy()
     df_rat["Year"] = df_rat["Year"].astype(int)
 
-    # Conversion rating_mean_num en numérique (au cas où)
+    # Conversion rating_mean_num en numérique
     df_rat["rating_mean_num"] = pd.to_numeric(df_rat["rating_mean_num"], errors="coerce")
 
     print("✔️ Aperçu Ratings moyens utilisés :")
     print(df_rat[["Country", "Code", "Year", "rating_mean_num"]].head(10))
 
     return df_rat[["Country", "Code", "Year", "rating_mean_num"]]
-
 
 # ================================
 # 3) LOAD DEFAULTS (wide → long)
@@ -258,7 +267,8 @@ def build_model_dataset():
     print(" 4) CONSTRUCTION DU DATASET FINAL")
     print("===============================")
 
-    base_dir = "/Users/beldjenna/Desktop/Rating Algo"
+    base_dir = r"C:\Users\youne\https-github.com-Youncki25-credit-rating-app"
+    # Sur Mac tu mettras : base_dir = "/Users/beldjenna/Desktop/Rating Algo"
 
     print("\n→ Chargement WB...")
     wb = load_wb_panel(base_dir)
@@ -269,30 +279,46 @@ def build_model_dataset():
     print("\n→ Chargement Defaults...")
     df_def = load_defaults(os.path.join(base_dir, "Crédit_rating.xlsm"))
 
-    print("\n→ Merge WB × Ratings...")
+    print("\nColonnes WB :", wb.columns.tolist())
+    print("Colonnes Ratings :", df_rat.columns.tolist())
+    print("Colonnes Defaults :", df_def.columns.tolist())
+
+    # ==========================
+    # 1) Merge WB × Ratings
+    # ==========================
+
+    print("\n→ Merge WB × Ratings sur ['Code','Year']...")
     df = wb.merge(
-        df_rat,
+        df_rat[["Code", "Year", "rating_mean_num"]],   # on garde que ce qui sert
         on=["Code", "Year"],
         how="left"
     )
     print("✔️ Merge Ratings OK. Shape :", df.shape)
     print(df.head())
 
-    print("\n→ Merge avec Defaults...")
+    # ==========================
+    # 2) Merge avec Defaults
+    # ==========================
+
+    print("\n→ Merge avec Defaults sur ['Code','Year']...")
     df = df.merge(
-        df_def[["Country", "Code", "Year", "default_dummy"]],
-        on=["Country", "Code", "Year"],
+        df_def[["Code", "Year", "default_dummy"]],
+        on=["Code", "Year"],
         how="left"
     )
     df["default_dummy"] = df["default_dummy"].fillna(0).astype(int)
     print("✔️ Merge Defaults OK. Shape :", df.shape)
     print(df.head())
 
+    # ==========================
+    # 3) Ajout indicatrice EM + default_lag
+    # ==========================
+
     print("\n→ Ajout indicatrice EM...")
     df["is_em"] = df["Code"].isin(EM_COUNTRIES).astype(int)
 
     print("→ Calcul du default_lag...")
-    df = df.sort_values(["Code","Year"])
+    df = df.sort_values(["Code", "Year"])
     df["default_lag"] = df.groupby("Code")["default_dummy"].shift(1).fillna(0).astype(int)
 
     print("\n✔️ Dataset final prêt. Shape :", df.shape)
