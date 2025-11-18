@@ -74,7 +74,7 @@ df_export = df_ratings.merge(
 )
 
 # Sauvegarde dans le MÊME fichier (même nom, mêmes données + colonnes ajoutées)
-df_export.to_excel(file_path, index=False)
+#df_export.to_excel(file_path, index=False)
 
 # Optionnel : contrôler que ça marche
 print(df_export.head())

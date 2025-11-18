@@ -18,7 +18,7 @@ COUNTRIES = [
     "GBR",  # Royaume-Uni
 ]
 
-# pays 
+   # pays 
 YEARS = "1990:2024"                      
 
 # fiscal, dette, déficit, inflation, balance commercial ( à ajouter)
@@ -28,45 +28,86 @@ WB_INDICATORS = {
     # ———————————————
     # ECONOMIC STRENGTH
     # ———————————————
+
+    # GDP niveau (courant)
+    "GDP (current US$)": "NY.GDP.MKTP.CD", #Prendre
+
+    # GDP croissance réelle
     "GDP growth (annual %)": "NY.GDP.MKTP.KD.ZG",
-    "GDP per capita (current US$)": "NY.GDP.PCAP.CD",
-    "Inflation, consumer prices (annual %)": "FP.CPI.TOTL.ZG",
-    "Exports of goods and services (% of GDP)": "NE.EXP.GNFS.ZS",
-    "Imports of goods and services (% of GDP)": "NE.IMP.GNFS.ZS",
-    "Trade openness (% of GDP)": "NE.TRD.GNFS.ZS",
 
+    # GDP per capita
+    "GDP per capita (current US$)": "NY.GDP.PCAP.CD", #prendre
 
-    "Unemployment (% labor force)": "SL.UEM.TOTL.ZS",
-    "Gini index": "SI.POV.GINI",
+    # Inflation
+    "Inflation, consumer prices (annual %)": "FP.CPI.TOTL.ZG", #prendre
 
+    # Exportations / Importations
+    "Exports of goods and services (% of GDP)": "NE.EXP.GNFS.ZS", #Prendre
+    "Imports of goods and services (% of GDP)": "NE.IMP.GNFS.ZS", #prendre
+
+    # Trade openness
+    "Trade openness (% of GDP)": "NE.TRD.GNFS.ZS",  
+
+    # Trade Balance = Exports – Imports (à calculer dans le code)
+    # NOTE : pas de code direct → construit via les deux variables ci-dessus
+    # Je l’inclus ici comme référence :
+    "Trade Balance (% of GDP) [constructed]": None, # prendre
+
+    # Unemployment
+    "Unemployment (% labor force)": "SL.UEM.TOTL.ZS", #prendre
+
+    # Gini
+    "Gini index": "SI.POV.GINI", # prendre
 
     # ———————————————
     # FISCAL STRENGTH
     # ———————————————
-    "Debt (% of GDP)": "GC.DOD.TOTL.GD.ZS",
-    "Interest payments (% of GDP)": "GC.XPN.INTP.ZS",
-    "Tax revenue (% of GDP)": "GC.TAX.TOTL.GD.ZS",
+
+    # Dette publique
+    "Debt (% of GDP)": "GC.DOD.TOTL.GD.ZS", #prendre
+
+    # Paiements d’intérêts
+    "Interest payments (% of GDP)": "GC.XPN.INTP.ZS", # prendre
+
+    # Recettes fiscales
+    "Tax revenue (% of GDP)": "GC.TAX.TOTL.GD.ZS", # prendre
+
+    # Net lending/borrowing (fiscal balance)
     "Net lending/borrowing (% of GDP)": "GC.NLD.TOTL.GD.ZS",
+
+    # Government revenue
     "Government revenue (% of GDP)": "GC.REV.XGRT.GD.ZS",
+
+    # Government spending
     "Government expenditure (% of GDP)": "GC.XPN.TOTL.GD.ZS",
+
+    # Cash surplus/deficit
     "Cash surplus/deficit (% of GDP)": "GC.BAL.CASH.GD.ZS",
+
+    # Government consumption
     "Government consumption (% of GDP)": "NE.CON.GOVT.ZS",
 
+    # ———————————————
+    # EXTERNAL SECTOR
+    # ———————————————
 
-    "Current account balance (% of GDP)": "BN.CAB.XOKA.GD.ZS",
-    "Total reserves (current US$)": "FI.RES.TOTL.CD",
+    "Current account balance (% of GDP)": "BN.CAB.XOKA.GD.ZS", # prendre 
+    "Total reserves (current US$)": "FI.RES.TOTL.CD", # prendre
     "Total reserves (months of imports)": "FI.RES.TOTL.MO",
-    "External debt stocks (current US$)": "DT.DOD.DECT.CD",
-    "External debt stocks (% of GNI)": "DT.DOD.DECT.GN.ZS",
+    "External debt stocks (current US$)": "DT.DOD.DECT.CD", # prendre
+    "External debt stocks (% of GNI)": "DT.DOD.DECT.GN.ZS", 
     "Foreign direct investment, net inflows (BoP, current US$)": "BX.KLT.DINV.CD.WD",
     "Foreign direct investment, net outflows (BoP, current US$)": "BM.KLT.DINV.CD.WD",
 
     # ———————————————
     # INSTITUTIONS & GOVERNANCE (WGI)
     # ———————————————
-    "Control of Corruption": "CC.EST",
-    "Political Stability and Absence of Violence": "PV.EST",
+    "Control of Corruption": "CC.EST", # prendre
+    "Political Stability and Absence of Violence": "PV.EST"
 }
+
+
+
 def make_session():
     s = requests.Session()
     retry = Retry(total=3, backoff_factor=0.5,
@@ -83,7 +124,7 @@ def wb_fetch_paginated(ind_code, country, years, per_page=1000):
 
     while True:
         url = base.format(country, ind_code, years, per_page, page)
-        r = session.get(url, timeout=30)
+        r = session.get(url, timeout=20)
         try:
             r.raise_for_status()
             data = r.json()
