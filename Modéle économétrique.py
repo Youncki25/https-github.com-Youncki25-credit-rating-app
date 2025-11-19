@@ -1,28 +1,14 @@
-# -*- coding: utf-8 -*-
-
 import os
 import glob
 import numpy as np
 import pandas as pd
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 
-
-
-
-
 # ================================
-# 0) PARAMÈTRES
+# 1) LECTURE DES DONNÉES WB
 # ================================
 
-COUNTRIES = ["FRA","GRC","JPN","USA","ECU","VNM","ZAF","ARG","EGY","GBR"]
-
-YEAR_START = 1990
-YEAR_END = 2024
-
-EM_COUNTRIES = ["ECU","VNM","ZAF","ARG","EGY"]
-
-
-WB_INDICATORS = [
+WB_INDICATORS_CANON = [
     "GDP growth (annual %)",
     "GDP per capita (current US$)",
     "Inflation, consumer prices (annual %)",
@@ -31,167 +17,194 @@ WB_INDICATORS = [
     "Net lending/borrowing (% of GDP)",
     "Current account balance (% of GDP)",
     "Control of Corruption",
-    "Political Stability and Absence of Violence"
+    "Political Stability and Absence of Violence",
 ]
 
 
-# ================================
-# 1) LOAD WB DATA
-# ================================
+def _standardize_wb_columns(df: pd.DataFrame, file_path: str | None = None) -> pd.DataFrame:
+    """
+    Corrige la colonne d'année et les fautes de frappe des colonnes WB,
+    puis ne garde que Year + colonnes utiles.
+    """
+    fname = os.path.basename(file_path) if file_path else "WB_file"
+    print(f"   Colonnes brutes WB ({fname}) : {list(df.columns)}")
 
-def load_wb_panel(base_dir):
+    # 1) Détection de la colonne d'année
+    year_col = None
+    # a) Essayer Year / year / YEAR / date / Date / DATE
+    for cand in ["Year", "year", "YEAR", "date", "Date", "DATE"]:
+        if cand in df.columns:
+            year_col = cand
+            break
 
+    # b) Sinon, chercher une colonne 'Unnamed' (par sécurité)
+    if year_col is None:
+        for c in df.columns:
+            if "Unnamed" in str(c):
+                year_col = c
+                break
+
+    if year_col is None:
+        raise ValueError(
+            f"Impossible de trouver la colonne année dans {fname}. "
+            f"Colonnes disponibles : {list(df.columns)}"
+        )
+
+    # 2) Renommer en Year
+    if year_col != "Year":
+        print(f"   → Colonne année détectée '{year_col}', renommée en 'Year'")
+        df = df.rename(columns={year_col: "Year"})
+
+    # 3) Transformer Year en année (int)
+    #    Si c'est une date, on prend .dt.year, sinon on essaie to_datetime.
+    if np.issubdtype(df["Year"].dtype, np.number):
+        # ex: déjà 1990, 1991...
+        pass
+    else:
+        # essayer conversion en datetime, puis year
+        year_conv = pd.to_datetime(df["Year"], errors="coerce")
+        if year_conv.notna().any():
+            df["Year"] = year_conv.dt.year
+        else:
+            # si vraiment impossible, on tente juste de caster en int
+            df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
+        # on enlève les lignes où Year est NaN
+        df = df[~df["Year"].isna()].copy()
+
+    df["Year"] = df["Year"].astype(int)
+
+    # 4) Corriger les fautes de frappe sur les noms d'indicateurs
+    rename_map = {
+        "Currrent account balance (% of GDP)": "Current account balance (% of GDP)",
+        "Current account balancce (% of GDP)": "Current account balance (% of GDP)",
+        "Control of Corruptioon": "Control of Corruption",
+    }
+    df = df.rename(columns=rename_map)
+
+    # 5) Construire la liste des colonnes à garder : Year + indicateurs présents
+    cols_to_keep = ["Year"]
+    for col in WB_INDICATORS_CANON:
+        if col in df.columns:
+            cols_to_keep.append(col)
+
+    print(f"   → Colonnes retenues après standardisation ({fname}) : {cols_to_keep}")
+    df = df[cols_to_keep].copy()
+    return df
+
+
+def load_wb_panel(base_dir: str) -> pd.DataFrame:
     print("\n===============================")
     print(" 1) LECTURE DES DONNÉES WB")
     print("===============================")
 
     pattern = os.path.join(base_dir, "*_WB_timeseries.xlsx")
     files = glob.glob(pattern)
-
-    print(f"→ Fichiers WB détectés : {files}")
-
-    if len(files) == 0:
-        raise FileNotFoundError("Aucun fichier *_WB_timeseries.xlsx trouvé.")
+    print(f"→ Fichiers WB détectés : {files}\n")
 
     all_list = []
 
     for path in files:
-        print(f"\n→ Lecture fichier WB : {path}")
+        code = os.path.basename(path).split("_")[0]  # ARG_WB_timeseries.xlsx → ARG
+        print(f"→ Lecture fichier WB : {path}")
+        try:
+            df_raw = pd.read_excel(path, sheet_name=0)
+            print("   ✔️ Lecture OK")
 
-        fname = os.path.basename(path)
-        code = fname.split("_")[0]
+            df = _standardize_wb_columns(df_raw, file_path=path)
+            df["Code"] = code
+            df["Country"] = code  # nom simple = code pour l'instant
 
-        if code not in COUNTRIES:
-            print(f"   ❌ {code} ignoré (pas dans COUNTRIES)")
-            continue
+            all_list.append(df)
+        except Exception as e:
+            print(f"   ⚠️ Erreur lecture {path} : {e}")
 
-        df_raw = pd.read_excel(path)
-        print("   ✔️ Lecture OK")
+        print()
 
-        if "date" not in df_raw.columns:
-            raise ValueError(f"❌ Le fichier {fname} ne contient pas 'date'")
-
-        df_raw = df_raw.rename(columns={"date": "Year"})
-        df_raw["Year"] = df_raw["Year"].astype(int)
-
-        df_raw = df_raw[(df_raw["Year"] >= YEAR_START) & (df_raw["Year"] <= YEAR_END)]
-
-        ind_cols = [c for c in WB_INDICATORS if c in df_raw.columns]
-
-        df_country = df_raw[["Year"] + ind_cols].copy()
-        df_country["Code"] = code
-        df_country["Country"] = code
-
-        print(f"   ✔️ Colonnes retenues : {ind_cols}")
-
-        all_list.append(df_country)
+    if not all_list:
+        raise ValueError("Aucun fichier WB n'a pu être lu correctement (all_list vide).")
 
     wb_panel = pd.concat(all_list, ignore_index=True)
-    print("\n✔️ WB Panel construit. Shape :", wb_panel.shape)
-    print(wb_panel.head())
+    print(f"✔️ WB Panel construit. Shape : {wb_panel.shape}")
+    print(wb_panel.head(), "\n")
 
     return wb_panel
 
 
-#ratings
+# ================================
+# 2) LECTURE DES RATINGS
+# ================================
 
-def load_ratings(path):
-
+def load_ratings(base_dir: str) -> pd.DataFrame:
     print("\n===============================")
     print(" 2) LECTURE DES RATINGS MOYENS")
     print("===============================")
 
+    path = os.path.join(base_dir, "Ratings.xlsx")
     print(f"→ Chemin Ratings : {path}")
-
     if not os.path.exists(path):
-        raise FileNotFoundError("❌ Ratings.xlsx introuvable.")
+        raise FileNotFoundError(f"Ratings.xlsx introuvable à {path}")
 
     xls = pd.ExcelFile(path)
-    print("→ Feuilles trouvées :", xls.sheet_names)
+    print(f"→ Feuilles trouvées : {xls.sheet_names}")
 
-    # --- Choix intelligent de la feuille ---
-    if "Ratings" in xls.sheet_names:
-        sheet_name = "Ratings"
-    elif "Sheet1" in xls.sheet_names:
-        sheet_name = "Sheet1"
+    sheet = "Ratings" if "Ratings" in xls.sheet_names else "Sheet1"
+    if sheet == "Sheet1":
         print("⚠️ Feuille 'Ratings' absente, utilisation de 'Sheet1'.")
-    else:
-        # on prend la première feuille par défaut
-        sheet_name = xls.sheet_names[0]
-        print(f"⚠️ Ni 'Ratings' ni 'Sheet1' trouvées, utilisation de '{sheet_name}'.")
 
-    print(f"→ Lecture de la feuille '{sheet_name}'...")
-    df_rat = pd.read_excel(path, sheet_name=sheet_name)
+    print(f"→ Lecture de la feuille '{sheet}'...")
+    df = pd.read_excel(path, sheet_name=sheet)
     print("✔️ Lecture Ratings OK")
-    print("✔️ Colonnes Ratings :", df_rat.columns.tolist())
-    print(df_rat.head())
+    print(f"✔️ Colonnes Ratings : {list(df.columns)}")
 
-    # On s'assure qu'on a bien Country, Code, Year
-    base_required = {"Country", "Code", "Year"}
-    missing_base = base_required - set(df_rat.columns)
-    if missing_base:
-        raise ValueError(f"❌ Colonnes manquantes dans Ratings.xlsx : {missing_base}")
+    cols_needed = ["Country", "Code", "Year", "rating_mean_num"]
+    missing = [c for c in cols_needed if c not in df.columns]
+    if missing:
+        raise ValueError(f"Colonnes manquantes dans Ratings.xlsx : {missing}")
 
-    # Gestion de la colonne de moyenne :
-    # - soit tu as 'rating_mean_num'
-    # - soit tu as 'mean_rating' (ton nouveau fichier)
-    if "rating_mean_num" not in df_rat.columns:
-        if "mean_rating" in df_rat.columns:
-            df_rat = df_rat.rename(columns={"mean_rating": "rating_mean_num"})
-            print("→ Colonne 'mean_rating' renommée en 'rating_mean_num'")
-        else:
-            raise ValueError(
-                "❌ Ni 'rating_mean_num' ni 'mean_rating' trouvées dans Ratings.xlsx"
-            )
+    df = df[cols_needed].copy()
 
-    # Conversion Year en int
-    df_rat["Year"] = pd.to_numeric(df_rat["Year"], errors="coerce")
-    df_rat = df_rat.dropna(subset=["Year"]).copy()
-    df_rat["Year"] = df_rat["Year"].astype(int)
-
-    # Conversion rating_mean_num en numérique
-    df_rat["rating_mean_num"] = pd.to_numeric(df_rat["rating_mean_num"], errors="coerce")
+    # moyenne au cas où plusieurs lignes par (pays, année)
+    df_mean = (
+        df.groupby(["Country", "Code", "Year"], as_index=False)["rating_mean_num"]
+        .mean()
+    )
 
     print("✔️ Aperçu Ratings moyens utilisés :")
-    print(df_rat[["Country", "Code", "Year", "rating_mean_num"]].head(10))
+    print(df_mean.head(10))
 
-    return df_rat[["Country", "Code", "Year", "rating_mean_num"]]
+    return df_mean
+
 
 # ================================
-# 3) LOAD DEFAULTS (wide → long)
+# 3) LECTURE DES DONNÉES DE DÉFAUT
 # ================================
 
-def load_defaults(path):
-
+def load_defaults(path: str) -> pd.DataFrame:
     print("\n===============================")
     print(" 3) LECTURE DES DONNÉES DE DÉFAUT")
     print("===============================")
 
     print(f"→ Chemin défauts : {path}")
-
     if not os.path.exists(path):
-        raise FileNotFoundError("❌ Crédit_rating.xlsm introuvable")
+        raise FileNotFoundError(f"Fichier défauts introuvable : {path}")
 
     xls = pd.ExcelFile(path)
-    print("→ Feuilles trouvées :", xls.sheet_names)
+    print(f"→ Feuilles trouvées : {xls.sheet_names}")
 
-    sheet_name = "Sheet1"
-    if sheet_name not in xls.sheet_names:
-        raise ValueError(f"❌ Feuille {sheet_name} introuvable dans Crédit_rating.xlsm")
-
-    print(f"→ Lecture de la feuille '{sheet_name}'...")
-    df_def = pd.read_excel(path, sheet_name=sheet_name)
+    sheet = "Sheet1"
+    print(f"→ Lecture de la feuille '{sheet}'...")
+    df_def = pd.read_excel(path, sheet_name=sheet)
     print("✔️ Lecture defaults brute OK")
-    print("   Colonnes lues :", df_def.columns.tolist())
+    print("   Colonnes lues :", list(df_def.columns))
     print(df_def.head())
 
-    # 1) Colonne Year
+    # colonne année
     if "Year" not in df_def.columns:
-        first_col = df_def.columns[0]
-        print(f"→ La colonne Year n'existe pas, on renomme '{first_col}' en 'Year'")
-        df_def = df_def.rename(columns={first_col: "Year"})
+        print("→ La colonne Year n'existe pas, on renomme 'Unnamed: 0' en 'Year'")
+        if "Unnamed: 0" not in df_def.columns:
+            raise ValueError("Impossible de trouver la colonne année (Year ou Unnamed: 0).")
+        df_def = df_def.rename(columns={"Unnamed: 0": "Year"})
 
-    # 2) Nettoyage Year : enlever 'Date'
     df_def["Year_num"] = pd.to_numeric(df_def["Year"], errors="coerce")
     print("→ Colonne Year_num après conversion :")
     print(df_def[["Year", "Year_num"]].head())
@@ -200,192 +213,205 @@ def load_defaults(path):
     df_def["Year"] = df_def["Year_num"].astype(int)
     df_def = df_def.drop(columns=["Year_num"])
 
-    print("✔️ Lignes après nettoyage Year. Shape :", df_def.shape)
+    print(f"✔️ Lignes après nettoyage Year. Shape : {df_def.shape}")
     print(df_def.head())
 
-    # 3) Mapping FR → codes ISO
-    country_map = {
+    mapping_cols_to_code = {
         "France": "FRA",
-        "Grèce": "GRC",
-        "Japon": "JPN",
         "US": "USA",
+        "Argentine": "ARG",
+        "Grèce": "GRC",
         "équateur": "ECU",
-        "Equateur": "ECU",
+        "Egypte": "EGY",
+        "Japon": "JPN",
         "Vietnam": "VNM",
         "Afrique du Sud": "ZAF",
-        "Argentine": "ARG",
-        "Egypte": "EGY",
         "Angleterre": "GBR",
     }
 
-    df_work = df_def[["Year"]].copy()
-    mapped_cols = []
-
     print("→ Création des colonnes par code pays à partir des noms français...")
-
+    keep_cols = ["Year"]
     for col in df_def.columns:
-        if col in ["Year", "Pays"]:
-            continue
-        if col in country_map:
-            code = country_map[col]
-            df_work[code] = df_def[col]
-            mapped_cols.append(code)
+        if col in mapping_cols_to_code:
+            code = mapping_cols_to_code[col]
             print(f"   {col}  →  {code}")
-        else:
+            df_def[code] = df_def[col]
+            keep_cols.append(code)
+        elif col not in ["Year", "Pays"]:
             print(f"   (ignorer la colonne '{col}', pas dans le mapping)")
 
-    if not mapped_cols:
-        raise ValueError("❌ Aucune colonne pays n'a été mappée. Vérifie le mapping country_map.")
+    df_def = df_def[keep_cols].copy()
+    print("✔️ Colonnes codes pays utilisées :", [c for c in df_def.columns if c != "Year"])
+    print(df_def.head())
 
-    print("✔️ Colonnes codes pays utilisées :", mapped_cols)
-    print(df_work.head())
-
-    # 4) wide → long
-    df_long = df_work.melt(
-        id_vars="Year",
-        value_vars=mapped_cols,
-        var_name="Code",
-        value_name="default_dummy"
-    )
-
+    df_long = df_def.melt(id_vars=["Year"], var_name="Code", value_name="default_dummy")
     df_long["default_dummy"] = df_long["default_dummy"].fillna(0).astype(int)
     df_long["Country"] = df_long["Code"]
 
-    print("✔️ Defaults transformés en format long. Shape :", df_long.shape)
+    print(f"✔️ Defaults transformés en format long. Shape : {df_long.shape}")
     print(df_long.head())
 
     return df_long
 
 
 # ================================
-# 4) BUILD DATASET FINAL
+# 4) CONSTRUCTION DU DATASET FINAL
 # ================================
 
-def build_model_dataset():
-
+def build_model_dataset(base_dir: str | None = None) -> pd.DataFrame:
     print("\n===============================")
     print(" 4) CONSTRUCTION DU DATASET FINAL")
     print("===============================")
 
-    base_dir = r"C:\Users\youne\https-github.com-Youncki25-credit-rating-app"
-    # Sur Mac tu mettras : base_dir = "/Users/beldjenna/Desktop/Rating Algo"
+    if base_dir is None:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    print("\n→ Chargement WB...")
-    wb = load_wb_panel(base_dir)
+    print("→ Chargement WB...")
+    wb_panel = load_wb_panel(base_dir)
 
-    print("\n→ Chargement Ratings (mean_rating)...")
-    df_rat = load_ratings(os.path.join(base_dir, "Ratings.xlsx"))
+    print("→ Chargement Ratings (mean_rating)...")
+    ratings = load_ratings(base_dir)
 
-    print("\n→ Chargement Defaults...")
-    df_def = load_defaults(os.path.join(base_dir, "Crédit_rating.xlsm"))
+    print("→ Chargement Defaults...")
+    defaults_path = os.path.join(base_dir, "Crédit_rating.xlsm")
+    defaults = load_defaults(defaults_path)
 
-    print("\nColonnes WB :", wb.columns.tolist())
-    print("Colonnes Ratings :", df_rat.columns.tolist())
-    print("Colonnes Defaults :", df_def.columns.tolist())
+    print("\nColonnes WB :", list(wb_panel.columns))
+    print("Colonnes Ratings :", list(ratings.columns))
+    print("Colonnes Defaults :", list(defaults.columns))
 
-    # ==========================
-    # 1) Merge WB × Ratings
-    # ==========================
-
+    # Merge WB × Ratings sur Code, Year
     print("\n→ Merge WB × Ratings sur ['Code','Year']...")
-    df = wb.merge(
-        df_rat[["Code", "Year", "rating_mean_num"]],   # on garde que ce qui sert
+    df = wb_panel.merge(
+        ratings[["Country", "Code", "Year", "rating_mean_num"]],
         on=["Code", "Year"],
-        how="left"
+        how="left",
+        suffixes=("", "_rat"),
     )
-    print("✔️ Merge Ratings OK. Shape :", df.shape)
-    print(df.head())
+    print(f"✔️ Merge Ratings OK. Shape : {df.shape}")
+    print(df.head(), "\n")
 
-    # ==========================
-    # 2) Merge avec Defaults
-    # ==========================
-
-    print("\n→ Merge avec Defaults sur ['Code','Year']...")
+    # Merge avec Defaults
+    print("→ Merge avec Defaults sur ['Code','Year']...")
     df = df.merge(
-        df_def[["Code", "Year", "default_dummy"]],
+        defaults[["Year", "Code", "default_dummy"]],
         on=["Code", "Year"],
-        how="left"
+        how="left",
     )
     df["default_dummy"] = df["default_dummy"].fillna(0).astype(int)
-    print("✔️ Merge Defaults OK. Shape :", df.shape)
-    print(df.head())
+    print(f"✔️ Merge Defaults OK. Shape : {df.shape}")
+    print(df.head(), "\n")
 
-    # ==========================
-    # 3) Ajout indicatrice EM + default_lag
-    # ==========================
+    # Ajout indicatrice EM
+    print("→ Ajout indicatrice EM...")
+    em_countries = {"ARG", "ECU", "EGY", "VNM", "ZAF"}  # ajuste si besoin
+    df["is_em"] = df["Code"].isin(em_countries).astype(int)
 
-    print("\n→ Ajout indicatrice EM...")
-    df["is_em"] = df["Code"].isin(EM_COUNTRIES).astype(int)
-
+    # default_lag : défaut l'année précédente
     print("→ Calcul du default_lag...")
     df = df.sort_values(["Code", "Year"])
-    df["default_lag"] = df.groupby("Code")["default_dummy"].shift(1).fillna(0).astype(int)
+    df["default_lag"] = (
+        df.groupby("Code")["default_dummy"].shift(1).fillna(0).astype(int)
+    )
 
     print("\n✔️ Dataset final prêt. Shape :", df.shape)
-    print(df.head())
+    print(df.head(), "\n")
 
-    return df
+    # ============================
+    # TRAITEMENT DES NA
+    # ============================
 
-
-# ================================
-# 5) MODEL ESTIMATION
-# ================================
-
-def estimate_ordered_model():
-
-    print("\n===============================")
-    print(" 5) ESTIMATION DU MODÈLE ORDINAL")
-    print("===============================")
-
-    df = build_model_dataset()
-
-    print("\n→ Suppression des lignes sans rating...")
-    df = df.dropna(subset=["rating_mean_num"])
-    print("✔️", df.shape, "lignes restantes")
-
-    df["score_mean_cat"] = df["rating_mean_num"].round().astype(int)
-
-    X_cols = [
+    macro_cols = [
         "GDP growth (annual %)",
         "GDP per capita (current US$)",
         "Inflation, consumer prices (annual %)",
         "Trade openness (% of GDP)",
-        "Debt (% of GDP)",
         "Net lending/borrowing (% of GDP)",
         "Current account balance (% of GDP)",
-        "Control of Corruption",
-        "Political Stability and Absence of Violence",
-        "is_em",
-        "default_lag"
+        "Debt (% of GDP)",
     ]
 
-    X_cols = [c for c in X_cols if c in df.columns]
+    gouv_cols = [
+        "Control of Corruption",
+        "Political Stability and Absence of Violence",
+    ]
 
-    print("\n→ Variables explicatives utilisées :", X_cols)
+    print("=== Nombre de NA par colonne macro/gouv AVANT traitement ===")
+    print(df[macro_cols + gouv_cols].isna().sum())
 
-    df_model = df.dropna(subset=X_cols).copy()
-    print("✔️ Dataset modèle prêt. Shape :", df_model.shape)
+    # Interpolation macro par pays
+    df[macro_cols] = df.groupby("Code")[macro_cols].transform(
+        lambda g: g.interpolate(limit_direction="both")
+    )
 
-    y = pd.Categorical(df_model["score_mean_cat"], ordered=True)
+    # Gouvernance : ffill + bfill
+    df[gouv_cols] = df.groupby("Code")[gouv_cols].transform(
+        lambda g: g.ffill().bfill()
+    )
+
+    print("\n=== Nombre de NA par colonne macro/gouv APRÈS traitement ===")
+    print(df[macro_cols + gouv_cols].isna().sum(), "\n")
+
+    # ============================
+    # Préparation dataset modèle
+    # ============================
+
+    df["score_mean_cat"] = df["rating_mean_num"].round().astype("Int64")
+
+    X_cols = [
+        "GDP growth (annual %)",
+        "Debt (% of GDP)",
+        "Inflation, consumer prices (annual %)",
+        "Current account balance (% of GDP)",
+        "is_em",
+        "default_lag",
+    ]
+
+    print("→ Suppression des lignes sans rating ou sans X...")
+    df_model = df.dropna(subset=X_cols + ["score_mean_cat"]).copy()
+    print("✔️", df_model.shape, "lignes restantes\n")
+
+    print("→ Variables explicatives utilisées :", X_cols)
+    print("✔️ Dataset modèle prêt. Shape :", df_model.shape, "\n")
+
+    return df_model
+
+
+# ================================
+# 5) ESTIMATION DU MODÈLE ORDINAL
+# ================================
+
+def estimate_ordered_model(base_dir: str | None = None):
+    print("\n===============================")
+    print(" 5) ESTIMATION DU MODÈLE ORDINAL")
+    print("===============================")
+
+    df_model = build_model_dataset(base_dir=base_dir)
+
+    X_cols = [
+        "GDP growth (annual %)",
+        "Debt (% of GDP)",
+        "Inflation, consumer prices (annual %)",
+        "Current account balance (% of GDP)",
+        "is_em",
+        "default_lag",
+    ]
+
+    y = df_model["score_mean_cat"].astype(int)
     X = df_model[X_cols]
 
-    print("\n→ Lancement Ordered Logit...")
+    print("→ Lancement Ordered Logit...")
     model = OrderedModel(y, X, distr="logit")
-    result = model.fit(method="bfgs")
+    result = model.fit(method="bfgs", disp=True)
 
     print("\n===============================")
     print("   RÉSULTATS DU MODÈLE ORDINAL")
     print("===============================")
     print(result.summary())
-    print("===============================")
 
     return result, df_model
 
 
-# ================================
-# 6) MAIN
-# ================================
-
 if __name__ == "__main__":
-    result, df_model = estimate_ordered_model()
-    
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    estimate_ordered_model(base_dir=base_dir)
