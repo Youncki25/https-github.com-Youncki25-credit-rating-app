@@ -1,10 +1,16 @@
-
 # NE PAS RUN EN CHANGEANT LES PAYS DANS COUNTRIES SANS ADAPTER LES FICHIERS
 # Ce script :
 #   1) Télécharge les séries WB pour tous les WB_INDICATORS
 #   2) Télécharge la dette FMI (GGXWDG_NGDP) pour 2000–2024
-#   3) Remplit / remplace la colonne "Debt (% of GDP)" dans chaque
-#      fichier {COUNTRY}_WB_timeseries.xlsx avec la dette FMI pour 2000–2024
+#   3) Télécharge aussi :
+#        - l'inflation CPI FMI (PCPIPCH)
+#        - le déficit FMI (GGXCNL_NGDP)
+#        - la charge de la dette FMI (GGXINT_NGDP)
+#   4) Met à jour les fichiers {COUNTRY}_WB_timeseries.xlsx :
+#        - "Debt (% of GDP)" : OVERRIDE avec FMI 2000–2024
+#        - "Inflation, consumer prices (annual %)" : COMPLÉTÉ avec FMI si NA
+#        - "Net lending/borrowing (% of GDP)" : COMPLÉTÉ avec FMI si NA
+#        - "Interest payments (% of GDP)" : COMPLÉTÉ avec FMI si NA
 
 import time
 import requests
@@ -31,15 +37,26 @@ COUNTRIES = [
 ]
 
 # Période World Bank (toutes les variables)
-YEARS = "1990:2024"
+YEARS = "2000:2024"
 
-# Période FMI pour la dette
+# Période FMI pour les séries WEO
 IMF_START_YEAR = 2000
 IMF_END_YEAR = 2024
 
+IMF_BASE_URL = "https://www.imf.org/external/datamapper/api/v1"
+
 # Indicateur FMI WEO : General government gross debt (% of GDP)
 IMF_DEBT_SERIES = "GGXWDG_NGDP"
-IMF_BASE_URL = "https://www.imf.org/external/datamapper/api/v1"
+
+# Indicateur FMI WEO : Net lending (+)/borrowing (–), % PIB (déficit)
+IMF_DEFICIT_SERIES = "GGXCNL_NGDP"
+
+# Indicateur FMI WEO : Inflation rate, average consumer prices (annual %)
+# -> proxie pour "Inflation, consumer prices (annual %)"
+IMF_CPI_SERIES = "PCPIPCH"
+
+# Indicateur FMI WEO : General government interest payments, % PIB
+IMF_INTEREST_SERIES = "GGXINT_NGDP"
 
 
 # Variables WB (comme tu les avais)
@@ -61,16 +78,14 @@ WB_INDICATORS = {
     # Trade Balance = Exports – Imports (construite dans le modèle si besoin)
     "Trade Balance (% of GDP) [constructed]": None,
 
-
-    "Debt (% of GDP)": "GC.DOD.TOTL.GD.ZS",  # prendre (mais sera override par FMI 2000–2024)
-    "Interest payments (% of GDP)": "GC.XPN.INTP.ZS",  # prendre
+    "Debt (% of GDP)": "GC.DOD.TOTL.GD.ZS",  # prendre (mais override par FMI 2000–2024)
+    "Interest payments (% of GDP)": "GC.XPN.INTP.ZS",  # prendre (complété par FMI)
     "Tax revenue (% of GDP)": "GC.TAX.TOTL.GD.ZS",  # prendre
-    "Net lending/borrowing (% of GDP)": "GC.NLD.TOTL.GD.ZS",
+    "Net lending/borrowing (% of GDP)": "GC.NLD.TOTL.GD.ZS",  # prendre (complété par FMI)
     "Government revenue (% of GDP)": "GC.REV.XGRT.GD.ZS",
     "Government expenditure (% of GDP)": "GC.XPN.TOTL.GD.ZS",
 
     "Current account balance (% of GDP)": "BN.CAB.XOKA.GD.ZS",  # prendre
-
 
     "Control of Corruption": "CC.EST",  # prendre
     "Political Stability and Absence of Violence": "PV.EST",
@@ -148,36 +163,59 @@ def wb_fetch_paginated(ind_code, country, years, per_page=1000):
 
 
 # =========================
-# OUTIL FMI
+# OUTILS FMI GÉNÉRIQUES
 # =========================
 
-def fetch_imf_debt(country):
+def fetch_imf_series_all_countries(series_code, value_label):
     """
-    Télécharge la dette FMI (GGXWDG_NGDP) pour un pays
+    Télécharge une série FMI (DataMapper) pour TOUS les pays de COUNTRIES
     entre IMF_START_YEAR et IMF_END_YEAR.
+
+    Retourne un DataFrame : [Code, Year, value_label]
     """
     periods = ",".join(str(y) for y in range(IMF_START_YEAR, IMF_END_YEAR + 1))
-    url = f"{IMF_BASE_URL}/{IMF_DEBT_SERIES}/{country}?periods={periods}"
+    countries_param = "/".join(COUNTRIES)
+    url = f"{IMF_BASE_URL}/{series_code}/{countries_param}?periods={periods}"
+
+    print(f"→ FMI {series_code} pour tous les pays")
+    # Debug :
+    # print("   URL :", url)
 
     r = requests.get(url, timeout=20)
     r.raise_for_status()
     data = r.json()
 
-    try:
-        series = data["values"][IMF_DEBT_SERIES][country]
-    except KeyError:
-        return pd.DataFrame(columns=["Code", "Year", "Debt (% of GDP)"])
+    if "values" not in data or series_code not in data["values"]:
+        print("⚠️ Réponse FMI inattendue pour", series_code, "- clés :", data.keys())
+        return pd.DataFrame(columns=["Code", "Year", value_label])
+
+    series_all = data["values"][series_code]
 
     rows = []
-    for year_str, value in series.items():
-        year = int(year_str)
-        if IMF_START_YEAR <= year <= IMF_END_YEAR:
-            val = float(value) if value is not None else None
+    for country in COUNTRIES:
+        country_dict = series_all.get(country, {}) or {}
+        for year_str, raw_val in country_dict.items():
+            try:
+                year = int(year_str)
+            except ValueError:
+                continue
+            if not (IMF_START_YEAR <= year <= IMF_END_YEAR):
+                continue
+            val = float(raw_val) if raw_val is not None else None
             rows.append(
-                {"Code": country, "Year": year, "Debt (% of GDP)": val}
+                {
+                    "Code": country,
+                    "Year": year,
+                    value_label: val,
+                }
             )
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
+        df["Code"] = df["Code"].str.upper()
+
+    return df
 
 
 # =========================
@@ -185,16 +223,25 @@ def fetch_imf_debt(country):
 # =========================
 
 def main():
-    # 1) Télécharger la dette FMI pour tous les pays une fois
-    print("===== Téléchargement dette FMI (GGXWDG_NGDP) =====")
-    imf_frames = []
-    for c in COUNTRIES:
-        print(f"→ FMI pour {c} ...")
-        df_c = fetch_imf_debt(c)
-        imf_frames.append(df_c)
-    df_imf = pd.concat(imf_frames, ignore_index=True)
-    df_imf["Year"] = pd.to_numeric(df_imf["Year"], errors="coerce").astype("Int64")
-    df_imf["Code"] = df_imf["Code"].str.upper()
+    # 1) Télécharger les séries FMI (dette, CPI, déficit, intérêts)
+    print("===== Téléchargement FMI (Debt, CPI, Déficit, Intérêts) =====")
+
+    df_imf_debt = fetch_imf_series_all_countries(
+        IMF_DEBT_SERIES,
+        "Debt (% of GDP)"
+    )
+    df_imf_cpi = fetch_imf_series_all_countries(
+        IMF_CPI_SERIES,
+        "Inflation, consumer prices (annual %) [IMF]"
+    )
+    df_imf_deficit = fetch_imf_series_all_countries(
+        IMF_DEFICIT_SERIES,
+        "Net lending/borrowing (% of GDP) [IMF]"
+    )
+    df_imf_interest = fetch_imf_series_all_countries(
+        IMF_INTEREST_SERIES,
+        "Interest payments (% of GDP) [IMF]"
+    )
 
     # 2) Boucle WB + fusion FMI par pays
     for COUNTRY in COUNTRIES:
@@ -224,18 +271,76 @@ def main():
         )
         ts = ts.sort_index()
 
-        # 2.b) Remplacer / compléter la dette WB par la dette FMI 2000–2024
+        # =========================
+        # 2.a) Injection de la dette FMI (OVERRIDE)
+        # =========================
         print(f"→ Injection de la dette FMI dans Debt (% of GDP) pour {COUNTRY}")
-        imf_c = df_imf[df_imf["Code"] == COUNTRY].set_index("Year")["Debt (% of GDP)"]
+        imf_debt_c = (
+            df_imf_debt[df_imf_debt["Code"] == COUNTRY]
+            .set_index("Year")["Debt (% of GDP)"]
+        )
 
-        # s'assurer que la colonne existe
         if "Debt (% of GDP)" not in ts.columns:
             ts["Debt (% of GDP)"] = pd.NA
 
-        # override sur les années où FMI a une valeur
-        for year, val in imf_c.items():
+        for year, val in imf_debt_c.items():
             if (year in ts.index) and (val is not None):
+                # OVERRIDE systématique 2000–2024
                 ts.loc[year, "Debt (% of GDP)"] = val
+
+        # =========================
+        # 2.b) CPI FMI -> compléter si NA
+        # =========================
+        print(f"→ Complétion CPI avec FMI pour {COUNTRY}")
+        imf_cpi_c = (
+            df_imf_cpi[df_imf_cpi["Code"] == COUNTRY]
+            .set_index("Year")["Inflation, consumer prices (annual %) [IMF]"]
+        )
+
+        if "Inflation, consumer prices (annual %)" not in ts.columns:
+            ts["Inflation, consumer prices (annual %)"] = pd.NA
+
+        for year, val in imf_cpi_c.items():
+            if (year in ts.index) and (val is not None):
+                current = ts.loc[year, "Inflation, consumer prices (annual %)"]
+                if pd.isna(current):
+                    ts.loc[year, "Inflation, consumer prices (annual %)"] = val
+
+        # =========================
+        # 2.c) Déficit FMI -> compléter si NA
+        # =========================
+        print(f"→ Complétion Déficit (Net lending/borrowing) avec FMI pour {COUNTRY}")
+        imf_def_c = (
+            df_imf_deficit[df_imf_deficit["Code"] == COUNTRY]
+            .set_index("Year")["Net lending/borrowing (% of GDP) [IMF]"]
+        )
+
+        if "Net lending/borrowing (% of GDP)" not in ts.columns:
+            ts["Net lending/borrowing (% of GDP)"] = pd.NA
+
+        for year, val in imf_def_c.items():
+            if (year in ts.index) and (val is not None):
+                current = ts.loc[year, "Net lending/borrowing (% of GDP)"]
+                if pd.isna(current):
+                    ts.loc[year, "Net lending/borrowing (% of GDP)"] = val
+
+        # =========================
+        # 2.d) Charge de la dette FMI -> compléter si NA
+        # =========================
+        print(f"→ Complétion Interest payments (% of GDP) avec FMI pour {COUNTRY}")
+        imf_int_c = (
+            df_imf_interest[df_imf_interest["Code"] == COUNTRY]
+            .set_index("Year")["Interest payments (% of GDP) [IMF]"]
+        )
+
+        if "Interest payments (% of GDP)" not in ts.columns:
+            ts["Interest payments (% of GDP)"] = pd.NA
+
+        for year, val in imf_int_c.items():
+            if (year in ts.index) and (val is not None):
+                current = ts.loc[year, "Interest payments (% of GDP)"]
+                if pd.isna(current):
+                    ts.loc[year, "Interest payments (% of GDP)"] = val
 
         # 3) Sauvegarde du fichier pays
         out_path = f"{COUNTRY}_WB_timeseries.xlsx"
