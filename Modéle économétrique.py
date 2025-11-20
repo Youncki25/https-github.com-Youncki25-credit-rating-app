@@ -9,7 +9,7 @@ from statsmodels.miscmodels.ordinal_model import OrderedModel
 # ================================
 
 WB_INDICATORS_CANON = [
-    "GDP growth (annual %)",
+    "GDP growth (annual %)", 
     "GDP per capita (current US$)",
     "Inflation, consumer prices (annual %)",
     "Trade openness (% of GDP)",
@@ -415,4 +415,47 @@ def estimate_ordered_model(base_dir: str | None = None):
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
     estimate_ordered_model(base_dir=base_dir)
-    
+
+
+
+def descriptive_stats(df):
+    print("\n===============================")
+    print("  STATISTIQUES DESCRIPTIVES")
+    print("===============================")
+
+    # Variables continues macro
+    macro_vars = [
+        "GDP growth (annual %)",
+        "Debt (% of GDP)",
+        "Inflation, consumer prices (annual %)",
+        "Current account balance (% of GDP)",
+    ]
+
+    # Variables catégorielles
+    cat_vars = [
+        "is_em",
+        "default_dummy",
+        "default_lag",
+        "score_mean_cat"
+    ]
+
+    # Statistiques descriptives macro
+    print("\n--- Variables macro (stats) ---")
+    print(df[macro_vars].describe().T)
+
+    # Statistiques pour variables catégorielles
+    print("\n--- Variables catégorielles (fréquences) ---")
+    for v in cat_vars:
+        print(f"\n>> {v}")
+        print(df[v].value_counts(normalize=True).round(3)*100)
+
+    # Stats par pays
+    print("\n--- MOYENNES PAR PAYS ---")
+    print(df.groupby("Code")[macro_vars + ["score_mean_cat"]].mean())
+
+    # Corrélations
+    print("\n--- MATRICE DE CORRÉLATION ---")
+    print(df[macro_vars + ["score_mean_cat"]].corr())
+
+df_model = build_model_dataset(base_dir=base_dir)
+descriptive_stats(df_model)
