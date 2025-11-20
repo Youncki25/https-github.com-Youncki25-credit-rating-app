@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
 
-file_path = "/Users/beldjenna/Desktop/Rating Algo/Ratings.xlsx"
+# ===== 1) Chemin du fichier =====
+file_path = r"C:\Users\youne\https-github.com-Youncki25-credit-rating-app\Ratings.xlsx"
 
-# Charger le fichier d'origine
-df_ratings = pd.read_excel(file_path)
+# Lire l'Excel
+df = pd.read_excel(file_path)
 
+# ===== 2) Tables de conversion =====
 sp_fitch_map = {
     "AAA": 21,
     "AA+": 20, "AA": 19, "AA-": 18,
@@ -28,54 +30,36 @@ moodys_map = {
     "B1": 8,    "B2": 7,    "B3": 6,
     "Caa1": 5,  "Caa2": 4,  "Caa3": 3,
     "Ca": 2,
-    "C": 1     # 1 (0 étant défaut type D)
+    "C": 1
 }
 
 def rating_to_num(agency, rating):
+    """Convertit un rating texte en score numérique selon l’agence."""
     if pd.isna(rating):
         return np.nan
+    rating = str(rating).strip()
     if agency in ["S&P", "Fitch"]:
         return sp_fitch_map.get(rating, np.nan)
     elif agency == "Moody's":
         return moodys_map.get(rating, np.nan)
-    else:
-        return np.nan
+    return np.nan
 
-# Conversion rating texte → rating numérique
-df_ratings["rating_num"] = df_ratings.apply(
+# ===== 3) rating_numeric (ligne par ligne) =====
+df["rating_numeric"] = df.apply(
     lambda row: rating_to_num(row["Agency"], row["Rating"]),
     axis=1
 )
 
-# Pivot : une ligne par (Country, Code, Year) avec une colonne par agence
-df_pivot = df_ratings.pivot_table(
-    index=["Country", "Code", "Year"],
-    columns="Agency",
-    values="rating_num"
-)
+# ===== 4) rating_mean_num & rating_mean_ordinal =====
+# On groupe par les colonnes d’identification disponibles
+group_cols = [col for col in ["Country", "Code", "Year"] if col in df.columns]
 
-# Moyenne des 3 agences
-df_pivot["rating_mean_num"] = df_pivot[["S&P", "Fitch", "Moody's"]].mean(axis=1, skipna=True)
+df["rating_mean_num"] = df.groupby(group_cols)["rating_numeric"].transform("mean")
 
-# On remet l’index à plat
-df_mean = df_pivot.reset_index()
+# Ordinal = arrondi au plus proche entier (avec gestion des NaN)
+df["rating_mean_ordinal"] = df["rating_mean_num"].round().astype("Int64")
 
-# Dictionnaire inverse pour reconstruire un rating texte "moyen"
-inv_sp_fitch_map = {v: k for k, v in sp_fitch_map.items()}
-df_mean["rating_mean_txt"] = df_mean["rating_mean_num"].round().map(inv_sp_fitch_map)
+# ===== 5) Sauvegarde dans le même fichier =====
+df.to_excel(file_path, index=False)
 
-# ---- MERGE AVEC LE FICHIER D’ORIGINE ----
-# On ne garde que les colonnes utiles pour ajouter au fichier initial
-cols_to_add = ["Country", "Code", "Year", "rating_mean_num", "rating_mean_txt"]
-df_export = df_ratings.merge(
-    df_mean[cols_to_add],
-    on=["Country", "Code", "Year"],
-    how="left"
-)
-
-# Sauvegarde dans le MÊME fichier (même nom, mêmes données + colonnes ajoutées)
-#df_export.to_excel(file_path, index=False)
-
-# Optionnel : contrôler que ça marche
-print(df_export.head())
-print(df_export[df_export["Country"] == "France"].head())
+print("Colonnes ajoutées : rating_numeric, rating_mean_num, rating_mean_ordinal")
