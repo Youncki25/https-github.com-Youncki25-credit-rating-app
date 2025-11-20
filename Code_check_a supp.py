@@ -52,6 +52,3 @@ if not df_missing.empty:
 else:
     print("\n🎉 Aucun trou dans les années de ratings sur la période définie.")
 
-
-x=16/(20*10)
-print(x)
