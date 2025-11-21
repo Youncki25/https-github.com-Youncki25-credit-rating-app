@@ -53,8 +53,6 @@ def load_df_model(path: str = DATA_PATH) -> pd.DataFrame:
 
     return df
 
-
-
 # Modéle 1: OLS sans indicatrices
 def ols_without_indicators(df: pd.DataFrame):
     """
@@ -155,15 +153,18 @@ if __name__ == "__main__":
 # estimer Model 2
     res_ols_with_indic = ols_with_isem_and_default_history(df_model)
 
+        # ===============================
+    # 4) EXEMPLE DE PRÉDICTION
+    # ===============================
 
     model_for_prediction = res_ols_with_indic   # modèle 2
 
     X_new = {
-        "GDP growth (annual %)": 3.108,
-        "Debt (% of GDP)": 68.7,
-        "Interest payments (% of GDP)": 6.37,
-        "Deficit (% of GDP)": 3.2,
-        "Inflation, consumer prices (annual %)": 5.8,
+        "GDP growth (annual %)": 0.725,
+        "Debt (% of GDP)": 134.6,
+        "Interest payments (% of GDP)": 5.0,
+        "Deficit (% of GDP)": 4.1,
+        "Inflation, consumer prices (annual %)": 2.0,
         "Current account balance (% of GDP)": -3.0,
         "is_em": 0,
         "default_ever": 0,

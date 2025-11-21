@@ -23,24 +23,31 @@ from urllib3.util.retry import Retry
 # CONFIG
 # =========================
 
-COUNTRIES = [
-    "FRA",  # France
-    "GRC",  # Grèce
-    "JPN",  # Japon
-    "USA",  # États-Unis
-    "ECU",  # Équateur
-    "VNM",  # Vietnam
-    "ZAF",  # Afrique du Sud
-    "ARG",  # Argentine
-    "EGY",  # Égypte
-    "GBR",  # Royaume-Uni
-    "ITA",  # Italie
-    "VEN",  # Venezuela
-    "ESP",  # Espagne
-    "DEU",  # Allemagne
-    "MEX",  # Mexique
-    "CAN",  # Canada
-    "URY",  # Uruguay
+COUNTRIES = ["VEN",
+    #"FRA", "GRC", "JPN", "USA", "ECU", "VNM", "ZAF", "ARG", "EGY", "GBR",
+    #"ITA", "ESP", "DEU", "MEX", "CAN", "URY",
+    # Nouveaux pays
+    #"BRA",  # Brésil
+    #"CHN",  # Chine
+    #"IND",  # Inde
+    #"TUR",  # Turquie
+    #"IDN",  # Indonésie
+    #"KOR",  # Corée du Sud
+    #"PRT",  # Portugal
+    #"IRL",  # Irlande
+    #"ISL",  # Islande
+    #"COL",  # Colombie
+    #"PER",  # Pérou
+    #"PHL",  # Philippines
+    #"THA",  # Thaïlande
+    #"MYS",  # Malaisie
+    #"CHL",  # Chili
+    #"POL",  # Pologne
+    #"HUN",  # Hongrie
+    #"CZE",  # République tchèque
+    #"ROU",  # Roumanie
+    #"BGR",  # Bulgarie
+    #"SWE",  # Suède
 ]
 
 # Période World Bank (toutes les variables)
@@ -170,7 +177,7 @@ def wb_fetch_paginated(ind_code, country, years, per_page=1000):
 
 
 # =========================
-# OUTILS FMI GÉNÉRIQUES
+# OUTILS FMI
 # =========================
 
 def fetch_imf_series_all_countries(series_code, value_label):
@@ -180,34 +187,41 @@ def fetch_imf_series_all_countries(series_code, value_label):
 
     Retourne un DataFrame : [Code, Year, value_label]
     """
-    periods = ",".join(str(y) for y in range(IMF_START_YEAR, IMF_END_YEAR + 1))
-    countries_param = "/".join(COUNTRIES)
-    url = f"{IMF_BASE_URL}/{series_code}/{countries_param}?periods={periods}"
-
-    print(f"→ FMI {series_code} pour tous les pays")
-    # Debug :
-    # print("   URL :", url)
-
-    r = requests.get(url, timeout=20)
-    r.raise_for_status()
-    data = r.json()
-
-    if "values" not in data or series_code not in data["values"]:
-        print("⚠️ Réponse FMI inattendue pour", series_code, "- clés :", data.keys())
-        return pd.DataFrame(columns=["Code", "Year", value_label])
-
-    series_all = data["values"][series_code]
-
     rows = []
+
     for country in COUNTRIES:
+        periods = ",".join(str(y) for y in range(IMF_START_YEAR, IMF_END_YEAR + 1))
+        url = f"{IMF_BASE_URL}/{series_code}/{country}?periods={periods}"
+
+        print(f"→ FMI {series_code} pour {country}")
+        # print("   URL:", url)
+
+        try:
+            r = requests.get(url, timeout=20)
+            r.raise_for_status()
+            data = r.json()
+        except Exception as e:
+            print(f"⚠️ Erreur FMI pour {country} ({series_code}) : {e}")
+            continue
+
+        # Structure attendue :
+        # {"values": {"GGXWDG_NGDP": {"FRA": {"2000": "60.12", ...}}}}
+        if "values" not in data or series_code not in data["values"]:
+            print(f"⚠️ Pas de clé 'values' ou '{series_code}' pour {country}")
+            continue
+
+        series_all = data["values"][series_code]
         country_dict = series_all.get(country, {}) or {}
+
         for year_str, raw_val in country_dict.items():
             try:
                 year = int(year_str)
             except ValueError:
                 continue
+
             if not (IMF_START_YEAR <= year <= IMF_END_YEAR):
                 continue
+
             val = float(raw_val) if raw_val is not None else None
             rows.append(
                 {
@@ -217,7 +231,15 @@ def fetch_imf_series_all_countries(series_code, value_label):
                 }
             )
 
+        # Pour ne pas spammer l'API
+        time.sleep(0.2)
+
+    # Construction du DF
     df = pd.DataFrame(rows)
+
+    # 🔥 Toujours définir les colonnes, même si df est vide
+    df = df.reindex(columns=["Code", "Year", value_label])
+
     if not df.empty:
         df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
         df["Code"] = df["Code"].str.upper()
@@ -292,8 +314,7 @@ def main():
 
         for year, val in imf_debt_c.items():
             if (year in ts.index) and (val is not None):
-                # OVERRIDE systématique 2000–2024
-                ts.loc[year, "Debt (% of GDP)"] = val
+                ts.loc[year, "Debt (% of GDP)"] = val   # OVERRIDE systématique 2000–2024
 
         # =========================
         # 2.b) CPI FMI -> compléter si NA
