@@ -24,16 +24,17 @@ from urllib3.util.retry import Retry
 # =========================
 
 COUNTRIES = [
-    "FRA",  # France
-    "GRC",  # Grèce
-    "JPN",  # Japon
-    "USA",  # États-Unis
-    "ECU",  # Équateur
-    "VNM",  # Vietnam
-    "ZAF",  # Afrique du Sud
-    "ARG",  # Argentine
-    "EGY",  # Égypte
-    "GBR",  # Royaume-Uni
+    #"FRA",  # France
+    #"GRC",  # Grèce
+    #"JPN",  # Japon
+    #"USA",  # États-Unis
+    #"ECU",  # Équateur
+    #"VNM",  # Vietnam
+    #"ZAF",  # Afrique du Sud
+    #"ARG",  # Argentine
+    #"EGY",  # Égypte
+    #"GBR",
+    "ITA",  # Royaume-Uni
 ]
 
 # Période World Bank (toutes les variables)
