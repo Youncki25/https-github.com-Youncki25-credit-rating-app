@@ -239,12 +239,12 @@ if __name__ == "__main__":
 
     # Exemple de vecteur de caractéristiques (à adapter à ton pays / année)
     X_new = {
-        "GDP growth (annual %)": 0.725,
-        "Debt (% of GDP)": 134.6,
-        "Interest payments (% of GDP)": 5.0,
-        "Deficit (% of GDP)": 4.1,
-        "Inflation, consumer prices (annual %)": 0.98,
-        "Current account balance (% of GDP)": -3.0,
+        "GDP growth (annual %)": 0.74,
+        "Debt (% of GDP)": 68.7,
+        "Interest payments (% of GDP)": 6.3,
+        "Deficit (% of GDP)": 3.2,
+        "Inflation, consumer prices (annual %)": 5.8,
+        "Current account balance (% of GDP)": -3.4,
         "is_em": 0,         # 0 = DM, 1 = EM
         "default_lag": 0,   # défaut l'année précédente
     }

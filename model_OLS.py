@@ -21,34 +21,12 @@ Ce script :
 import pandas as pd
 import statsmodels.api as sm
 
-# =========================================================
-# 1) CHARGEMENT DU DATAFRAME DÉJÀ CONSTRUIT
-# =========================================================
 
+# Data déja done 
 DATA_PATH = "model_dataset.xlsx"  # généré par ton script Modéle économétrique
 
 
 def load_df_model(path: str = DATA_PATH) -> pd.DataFrame:
-    """
-    Charge le DataFrame final déjà construit (df_model).
-
-    On suppose que le fichier contient au minimum :
-      - 'rating_mean_num'
-      - 'Code'
-      - variables macro :
-          'GDP growth (annual %)',
-          'Debt (% of GDP)',
-          'Inflation, consumer prices (annual %)',
-          'Current account balance (% of GDP)',
-          éventuellement :
-          'Interest payments (% of GDP)',
-          'Net lending/borrowing (% of GDP)',
-          'Deficit (% of GDP)'
-      - variables de défaut :
-          'default_dummy' (0/1 année t)
-          'is_em' (0/1 pays émergent) — utile pour le deuxième modèle
-    """
-
     if path.lower().endswith((".xlsx", ".xls")):
         df = pd.read_excel(path)
     else:
@@ -60,13 +38,10 @@ def load_df_model(path: str = DATA_PATH) -> pd.DataFrame:
 
     # 1) Construire 'Deficit (% of GDP)' si absent
     #    Net lending/borrowing > 0 = surplus, < 0 = déficit
-    #    On veut : Déficit positif quand déficit → Deficit = - Net lending
     if "Deficit (% of GDP)" not in df.columns and "Net lending/borrowing (% of GDP)" in df.columns:
         df["Deficit (% of GDP)"] = -df["Net lending/borrowing (% of GDP)"]
         print("→ Colonne 'Deficit (% of GDP)' construite à partir de 'Net lending/borrowing (% of GDP)'.\n")
 
-    # 2) Construire default_ever (indicateur : le pays a-t-il déjà fait défaut dans son histoire ?)
-    #    On part de default_dummy (0/1 par année) et on fait un cummax par pays.
     if "default_dummy" in df.columns and "default_ever" not in df.columns:
         df["default_ever"] = (
             df.sort_values(["Code", "Year"])
@@ -79,16 +54,10 @@ def load_df_model(path: str = DATA_PATH) -> pd.DataFrame:
     return df
 
 
-# =========================================================
-# 2) MODÈLE 1 : OLS SANS AUCUNE INDICATRICE
-# =========================================================
 
+# Modéle 1: OLS sans indicatrices
 def ols_without_indicators(df: pd.DataFrame):
     """
-    Modèle OLS SANS aucune indicatrice (ni is_em, ni défaut) :
-
-    Équation estimée :
-
     Rating_it = β0
                 + β1 * GDPgrowth_it
                 + β2 * Debtpib_it
@@ -110,6 +79,7 @@ def ols_without_indicators(df: pd.DataFrame):
 
     missing = [c for c in X_cols if c not in df.columns]
     if missing:
+        # Check si tt les colonnes dans le df
         raise ValueError(f"Colonnes manquantes pour le modèle OLS sans indicatrices : {missing}")
 
     df_clean = df.dropna(subset=X_cols + ["rating_mean_num"]).copy()
@@ -129,16 +99,9 @@ def ols_without_indicators(df: pd.DataFrame):
     return model
 
 
-# =========================================================
-# 3) MODÈLE 2 : OLS AVEC is_em ET default_ever
-# =========================================================
-
+# Modéle 2 : OLS avec is_em et default_ever
 def ols_with_isem_and_default_history(df: pd.DataFrame):
     """
-    Modèle OLS AVEC indicatrices is_em et défaut dans l'histoire du pays :
-
-    Équation estimée :
-
     Rating_it = β0
                 + β1 * GDPgrowth_it
                 + β2 * Debtpib_it
@@ -149,8 +112,6 @@ def ols_with_isem_and_default_history(df: pd.DataFrame):
                 + β7 * is_em_i
                 + β8 * default_ever_i
                 + ε_it
-
-    où :
       - is_em_i = 1 si le pays i est un pays émergent, 0 sinon
       - default_ever_i = 1 si le pays i a déjà fait défaut au moins une fois (sur toute l'histoire)
     """
@@ -162,8 +123,8 @@ def ols_with_isem_and_default_history(df: pd.DataFrame):
         "Deficit (% of GDP)",
         "Inflation, consumer prices (annual %)",
         "Current account balance (% of GDP)",
-        "is_em",
-        "default_ever",
+        "is_em", # dummy 1
+        "default_ever", # dummy 2
     ]
 
     missing = [c for c in X_cols if c not in df.columns]
@@ -184,38 +145,28 @@ def ols_with_isem_and_default_history(df: pd.DataFrame):
     print("===============================\n")
     print(model.summary())
 
-    return model
 
-
-# =========================================================
-# 4) MAIN : LANCER LES DEUX MODÈLES + EXEMPLE DE PRÉDICTION
-# =========================================================
-
+# Prédiction
 if __name__ == "__main__":
-    # 1) Charger le DataFrame final
     df_model = load_df_model(DATA_PATH)
-
-    # 2) Estimer OLS sans aucune indicatrice
+# estimer Model 1
     res_ols_no_indic = ols_without_indicators(df_model)
 
-    # 3) Estimer OLS avec is_em et défaut dans l'histoire (default_ever)
+# estimer Model 2
     res_ols_with_indic = ols_with_isem_and_default_history(df_model)
 
-        # ===============================
-    # 4) EXEMPLE DE PRÉDICTION
-    # ===============================
 
     model_for_prediction = res_ols_with_indic   # modèle 2
 
     X_new = {
-        "GDP growth (annual %)": 0.725,
-        "Debt (% of GDP)": 134.6,
-        "Interest payments (% of GDP)": 5.0,
-        "Deficit (% of GDP)": 4.1,
-        "Inflation, consumer prices (annual %)": 2.0,
+        "GDP growth (annual %)": 3.108,
+        "Debt (% of GDP)": 68.7,
+        "Interest payments (% of GDP)": 6.37,
+        "Deficit (% of GDP)": 3.2,
+        "Inflation, consumer prices (annual %)": 5.8,
         "Current account balance (% of GDP)": -3.0,
         "is_em": 0,
-        "default_ever": 1,
+        "default_ever": 0,
     }
 
     X_new_df = pd.DataFrame([X_new])
