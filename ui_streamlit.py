@@ -30,6 +30,87 @@ hr { border: none; border-top: 1px solid var(--line); margin: 0.75rem 0; }
 </style>
 """
 
+# ========= MAPPING DES NOTES → SCORE ORDINAL COMMUN =========
+
+# Échelle S&P / Fitch standard (22 crans)
+RATING_ORDER = [
+    "AAA",
+    "AA+",
+    "AA",
+    "AA-",
+    "A+",
+    "A",
+    "A-",
+    "BBB+",
+    "BBB",
+    "BBB-",
+    "BB+",
+    "BB",
+    "BB-",
+    "B+",
+    "B",
+    "B-",
+    "CCC+",
+    "CCC",
+    "CCC-",
+    "CC",
+    "C",
+    "D",
+]
+
+RATING_TO_SCORE = {rat: i + 1 for i, rat in enumerate(RATING_ORDER)}
+
+# Correspondance Moody's → notation S&P/Fitch
+MOODYS_TO_SP = {
+    "Aaa": "AAA",
+    "Aa1": "AA+",
+    "Aa2": "AA",
+    "Aa3": "AA-",
+    "A1": "A+",
+    "A2": "A",
+    "A3": "A-",
+    "Baa1": "BBB+",
+    "Baa2": "BBB",
+    "Baa3": "BBB-",
+    "Ba1": "BB+",
+    "Ba2": "BB",
+    "Ba3": "BB-",
+    "B1": "B+",
+    "B2": "B",
+    "B3": "B-",
+    "Caa1": "CCC+",
+    "Caa2": "CCC",
+    "Caa3": "CCC-",
+    "Ca": "CC",
+    "C": "C",
+}
+
+def rating_to_ordinal(rating: Optional[str]) -> Optional[int]:
+    """
+    Convertit une notation en score ordinal (1 = AAA, ..., 22 = D)
+    en harmonisant S&P / Fitch / Moody's.
+    """
+    if rating is None or (isinstance(rating, float) and pd.isna(rating)):
+        return None
+
+    r = str(rating).strip()
+
+    # D'abord : on essaie direct sur la grille S&P/Fitch
+    r_up = r.upper()
+    if r_up in RATING_TO_SCORE:
+        return RATING_TO_SCORE[r_up]
+
+    # Moody's : on garde la casse (Aaa, Aa1, ...)
+    if r in MOODYS_TO_SP:
+        sp_equiv = MOODYS_TO_SP[r]
+        return RATING_TO_SCORE.get(sp_equiv)
+
+    # Cas type "NR", "N/A", etc. → None
+    return None
+
+
+# ========= DATACLASS ANALYSTE & UI PROFILS =========
+
 @dataclass
 class Analyst:
     id: str
@@ -220,7 +301,7 @@ def _render_page_content(page: str):
         st.write(
             "Vous trouverez ci-dessous les notations souveraines 2024 des trois principales agences, "
             "ainsi que la note estimée par notre modèle. Cela vous permet de comparer l’évaluation "
-            "des agences avec notre approche économétrique interne."
+            "des agences avec notre approche économétrique interne, sur une échelle ordinale commune."
         )
 
         ratings_2024, country_col = load_ratings_2024()
@@ -251,29 +332,34 @@ def _render_page_content(page: str):
 
         agence = methodology_to_agency[methodology]
 
-        # Cas agences externes
+        # ========= 1) Cas agences externes =========
         if agence is not None:
             if agence in ratings_2024.columns:
                 note_2024 = ratings_2024.loc[pays, agence]
+                score_ord = rating_to_ordinal(note_2024)
+
                 st.markdown(
                     f"💡 **Note {agence} 2024 pour {pays} :** "
                     f"<span style='font-size:22px; font-weight:bold;'>{note_2024}</span>",
                     unsafe_allow_html=True
                 )
+                if score_ord is not None:
+                    st.caption(f"Score ordinal associé : {score_ord} (1 = AAA, 22 = D)")
+                else:
+                    st.caption("Score ordinal non défini pour cette notation.")
             else:
                 st.warning(
                     f"La colonne agence '{agence}' n'existe pas dans rating2.xlsx. "
                     "Vérifie le nom exact de la colonne (S&P, SP, etc.)."
                 )
-        # Cas échelle interne
+
+        # ========= 2) Cas échelle interne =========
         else:
             if internal_ratings is None:
                 st.info("Les notes internes ne sont pas encore disponibles (fichier internal_ratings_*.xlsx manquant).")
             else:
-                # on suppose que l'index des ratings (pays) correspond au Code
-                code = pays
+                code = pays  # on suppose que l'index de ratings_2024 est le code pays
 
-                # on essaie d'abord 2024, sinon dernière année dispo
                 years_avail = internal_ratings["Year"].unique()
                 target_year = 2024 if 2024 in years_avail else int(internal_ratings["Year"].max())
 
@@ -292,7 +378,24 @@ def _render_page_content(page: str):
                         unsafe_allow_html=True
                     )
                     if "predicted_cat" in row.columns:
-                        st.caption(f"Catégorie ordinale la plus probable : {int(row['predicted_cat'].iloc[0])}")
+                        cat = int(row["predicted_cat"].iloc[0])
+                        st.caption(
+                            f"Catégorie ordinale la plus probable (échelle interne) : {cat} "
+                            "(1 = AAA, 22 = D, même grille que les agences)."
+                        )
+
+        # ========= 3) Tableau récap : lettres + scores pour TOUTES les agences =========
+        st.markdown("---")
+        st.markdown(f"**Résumé des notations 2024 pour {pays} (agences externes)**")
+
+        row_letters = ratings_2024.loc[pays].copy()  # Series : index = agences, values = rating lettre
+        df_rec = pd.DataFrame({
+            "Agence": row_letters.index,
+            "Notation": row_letters.values,
+        })
+        df_rec["Score ordinal"] = df_rec["Notation"].apply(rating_to_ordinal)
+
+        st.dataframe(df_rec.set_index("Agence"))
 
         st.markdown("</div>", unsafe_allow_html=True)
 
