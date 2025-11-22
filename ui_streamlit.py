@@ -1,9 +1,8 @@
-# ui : interface du streallit 
 # ui_streamlit.py
 import streamlit as st
 from dataclasses import dataclass
 from typing import Optional, List, Dict
-import base64, os, uuid
+import base64, os, uuid, glob
 import pandas as pd
 import matplotlib.pyplot as plt
 from macro_graphs import render_macro_page
@@ -66,13 +65,12 @@ def _build_from_config(config: List[Dict]) -> List[Analyst]:
         )
     return out
 
-# --------- Sous-vues UI ----------
 def _render_sidebar() -> str:
     st.sidebar.markdown("### Menu")
     page = st.sidebar.radio(
-    "Navigation",
-    ["Présentation", "Simulation de la note", "Macroéconomie", "Contact"],
-    index=0,
+        "Navigation",
+        ["Présentation", "Simulation de la note", "Macroéconomie", "Contact"],
+        index=0,
     )
     st.sidebar.markdown("---")
     return page
@@ -84,7 +82,6 @@ def _render_profiles_panel():
         st.caption("Aucun profil. Clique sur **Reset** pour recharger depuis script.py.")
     else:
         for prof in st.session_state.profiles:
-            # 1 seule ligne de colonnes (pas d'imbrication >1)
             c1, c2, c3, c4 = st.columns([1, 3, 1, 1])
             with c1:
                 if prof.b64:
@@ -107,10 +104,9 @@ def _render_profiles_panel():
     if st.button("🔄 Reset depuis script.py"):
         st.session_state.profiles = _build_from_config(ANALYSTS_CONFIG)
         st.experimental_rerun()
-# Matthew dans page === Présentation
 
 # ==============================
-#  FONCTION : chargement rating2
+#  FONCTION : chargement rating2 (agences)
 # ==============================
 @st.cache_data
 def load_ratings_2024(path: str = "rating2.xlsx"):
@@ -121,10 +117,13 @@ def load_ratings_2024(path: str = "rating2.xlsx"):
     ATTEND dans rating2.xlsx au moins les colonnes :
         Year, Agency, Rating, Code (ou Country)
     """
+    if not os.path.exists(path):
+        st.error(f"❌ Fichier '{path}' introuvable.")
+        return None, None
+
     df = pd.read_excel(path)
     df.columns = [c.strip() for c in df.columns]
 
-    # Vérif colonne Year
     if "Year" not in df.columns:
         st.error("La colonne 'Year' est manquante dans rating2.xlsx")
         return None, None
@@ -132,7 +131,10 @@ def load_ratings_2024(path: str = "rating2.xlsx"):
     df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
     df_2024 = df[df["Year"] == 2024].copy()
 
-    # Détection de la colonne pays
+    if df_2024.empty:
+        st.warning("Aucune observation pour l'année 2024 dans rating2.xlsx.")
+        return None, None
+
     if "Code" in df_2024.columns:
         country_col = "Code"
     elif "Country" in df_2024.columns:
@@ -141,13 +143,11 @@ def load_ratings_2024(path: str = "rating2.xlsx"):
         st.error("Aucune colonne 'Code' ou 'Country' trouvée dans rating2.xlsx")
         return None, None
 
-    # Vérif colonnes agence / rating
     needed = {"Agency", "Rating"}
     if not needed.issubset(df_2024.columns):
         st.error("rating2.xlsx doit contenir les colonnes 'Agency' et 'Rating'")
         return None, None
 
-    # Pivot : un pays = une ligne, chaque agence = une colonne
     ratings_pivot = df_2024.pivot_table(
         index=country_col,
         columns="Agency",
@@ -157,6 +157,40 @@ def load_ratings_2024(path: str = "rating2.xlsx"):
 
     return ratings_pivot, country_col
 
+# ==============================
+#  FONCTION : chargement notes internes (modèle)
+# ==============================
+@st.cache_data
+def load_internal_ratings(pattern: str = "internal_ratings_*.xlsx"):
+    """
+    Charge le fichier des notes internes exporté par le modèle :
+    colonnes attendues : Code, Year, expected_score, predicted_cat
+    """
+    files = glob.glob(pattern)
+    if not files:
+        return None
+
+    files.sort()
+    latest = files[-1]  # dernier fichier = dernière année estimée
+
+    try:
+        df = pd.read_excel(latest)
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture des notes internes ({latest}) : {e}")
+        return None
+
+    df.columns = [c.strip() for c in df.columns]
+
+    for col in ["Code", "Year", "expected_score"]:
+        if col not in df.columns:
+            st.error("Le fichier de notes internes doit contenir au minimum 'Code', 'Year' et 'expected_score'.")
+            return None
+
+    df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
+    df = df.dropna(subset=["Year"])
+    df["Year"] = df["Year"].astype(int)
+
+    return df
 
 # ==============================
 #  CONTENU DES PAGES
@@ -183,56 +217,86 @@ def _render_page_content(page: str):
 
     elif page == "Simulation de la note":
         st.markdown("### Simulation de la note")
+        st.write(
+            "Vous trouverez ci-dessous les notations souveraines 2024 des trois principales agences, "
+            "ainsi que la note estimée par notre modèle. Cela vous permet de comparer l’évaluation "
+            "des agences avec notre approche économétrique interne."
+        )
 
-        # --- chargement des ratings 2024 ---
         ratings_2024, country_col = load_ratings_2024()
+        internal_ratings = load_internal_ratings()
+
+        if ratings_2024 is None:
+            st.info("Les notations des agences ne sont pas disponibles pour le moment.")
+            return
 
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        issuer = st.text_input("Nom de l'émetteur (affichage uniquement)")
 
         methodology = st.selectbox(
             "Méthodologie",
             ["Échelle S&P (AAA–D)", "Échelle Moody's (Aaa–C)", "Échelle Fitch (AAA–D)", "Échelle interne"],
         )
 
-        # Si le fichier rating2 a bien été chargé
-        if ratings_2024 is not None:
-            # Choix du pays sur base du fichier Excel
-            pays = st.selectbox(
-                "Pays (code ISO / nom dans rating2)",
-                options=ratings_2024.index.tolist()
-            )
+        pays = st.selectbox(
+            "Pays (code ISO / nom dans rating2)",
+            options=ratings_2024.index.tolist()
+        )
 
-            # Mapping nom de méthodo -> colonne d'agence dans rating2
-            methodology_to_agency = {
-                "Échelle S&P (AAA–D)": "S&P",       # adapter au nom exact dans rating2.xlsx
-                "Échelle Moody's (Aaa–C)": "Moody's",
-                "Échelle Fitch (AAA–D)": "Fitch",
-                "Échelle interne": None,
-            }
+        methodology_to_agency = {
+            "Échelle S&P (AAA–D)": "S&P",
+            "Échelle Moody's (Aaa–C)": "Moody's",
+            "Échelle Fitch (AAA–D)": "Fitch",
+            "Échelle interne": None,
+        }
 
-            agence = methodology_to_agency[methodology]
+        agence = methodology_to_agency[methodology]
 
-            if agence is not None:
-                if agence in ratings_2024.columns:
-                    note_2024 = ratings_2024.loc[pays, agence]
+        # Cas agences externes
+        if agence is not None:
+            if agence in ratings_2024.columns:
+                note_2024 = ratings_2024.loc[pays, agence]
+                st.markdown(
+                    f"💡 **Note {agence} 2024 pour {pays} :** "
+                    f"<span style='font-size:22px; font-weight:bold;'>{note_2024}</span>",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.warning(
+                    f"La colonne agence '{agence}' n'existe pas dans rating2.xlsx. "
+                    "Vérifie le nom exact de la colonne (S&P, SP, etc.)."
+                )
+        # Cas échelle interne
+        else:
+            if internal_ratings is None:
+                st.info("Les notes internes ne sont pas encore disponibles (fichier internal_ratings_*.xlsx manquant).")
+            else:
+                # on suppose que l'index des ratings (pays) correspond au Code
+                code = pays
+
+                # on essaie d'abord 2024, sinon dernière année dispo
+                years_avail = internal_ratings["Year"].unique()
+                target_year = 2024 if 2024 in years_avail else int(internal_ratings["Year"].max())
+
+                row = internal_ratings[
+                    (internal_ratings["Code"] == code) &
+                    (internal_ratings["Year"] == target_year)
+                ]
+
+                if row.empty:
+                    st.warning(f"Aucune note interne disponible pour {code} en {target_year}.")
+                else:
+                    expected_score = row["expected_score"].iloc[0]
                     st.markdown(
-                        f"💡 **Note {agence} 2024 pour {pays} :** "
-                        f"<span style='font-size:22px; font-weight:bold;'>{note_2024}</span>",
+                        f"💡 **Note interne (score attendu) {target_year} pour {code} :** "
+                        f"<span style='font-size:22px; font-weight:bold;'>{expected_score:.2f}</span>",
                         unsafe_allow_html=True
                     )
-                else:
-                    st.warning(
-                        f"La colonne agence '{agence}' n'existe pas dans rating2.xlsx. "
-                        "Vérifie le nom exact de la colonne (S&P, SP, etc.)."
-                    )
-            else:
-                st.info("Aucune note d’agence associée pour l’échelle interne pour le moment.")
+                    if "predicted_cat" in row.columns:
+                        st.caption(f"Catégorie ordinale la plus probable : {int(row['predicted_cat'].iloc[0])}")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
     elif page == "Macroéconomie":
-        # Ta fonction existante
         render_macro_page()
 
     elif page == "Contact":
@@ -241,17 +305,13 @@ def _render_page_content(page: str):
 
 
 def launch_dashboard():
-    # Injecte le CSS
     st.markdown(DARK_CSS, unsafe_allow_html=True)
 
-    # Sidebar (choix de page)
     page = _render_sidebar()
 
-    # État en session (profils)
     if "profiles" not in st.session_state:
         st.session_state.profiles = _build_from_config(ANALYSTS_CONFIG)
 
-    # Layout principal : gauche (contenu) / droite (profils)
     left, right = st.columns([5, 2])
     with left:
         _render_page_content(page)

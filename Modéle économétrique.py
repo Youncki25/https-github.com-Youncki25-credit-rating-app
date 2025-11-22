@@ -192,7 +192,7 @@ def load_defaults(base_dir: str) -> pd.DataFrame:
 # 5) BUILD MODEL DATASET — AVEC AR(1)
 # =======================================================================================
 
-def build_model_dataset(base_dir: str) -> pd.DataFrame:
+def build_model_dataset(base_dir: str) -> tuple[pd.DataFrame, list]:
     print("4) CONSTRUCTION DU DATASET FINAL")
 
     wb_panel = load_wb_panel(base_dir)
@@ -216,7 +216,7 @@ def build_model_dataset(base_dir: str) -> pd.DataFrame:
     # Default lag cumulatif
     df["default_lag"] = df.groupby("Code")["default_dummy"].transform(lambda s: s.cummax())
 
-    # ⭐⭐⭐ AR(1) : rating(t-1) = lag du rating continu
+    # AR(1) : rating(t-1)
     df["rating_lag"] = df.groupby("Code")["rating_mean_num"].shift(1)
 
     # Interpolation macro
@@ -257,7 +257,7 @@ def build_model_dataset(base_dir: str) -> pd.DataFrame:
         "Interest payments (% of GDP)",
         "is_em",
         "default_lag",
-        "rating_lag",              # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< AR(1)
+        "rating_lag",
     ]
 
     df_model = df.dropna(subset=X_cols + ["score_mean_cat"]).copy()
@@ -268,16 +268,13 @@ def build_model_dataset(base_dir: str) -> pd.DataFrame:
 
     return df_model, X_cols
 
-
 # =======================================================================================
 # 6) ESTIMATION DU MODÈLE ORDINAL (AVEC AR(1))
 # =======================================================================================
 
 def estimate_ordered_model(base_dir: str):
-    # On récupère le dataset + la liste exacte des X
     df_model, X_cols = build_model_dataset(base_dir)
 
-    # Variable dépendante = score ordinal
     y = df_model["score_mean_cat"].astype(int)
     X = df_model[X_cols]
 
@@ -287,9 +284,8 @@ def estimate_ordered_model(base_dir: str):
     print(result.summary())
     return result, df_model, X_cols
 
-
 # =======================================================================================
-# 7) MAIN : ESTIMATION + TEST SUR LA DERNIÈRE ANNÉE
+# 7) MAIN : ESTIMATION + EXPORT DES NOTES INTERNES
 # =======================================================================================
 
 if __name__ == "__main__":
@@ -304,18 +300,13 @@ if __name__ == "__main__":
     print("===============================\n")
     print(df_model["score_mean_cat"].value_counts().sort_index())
 
-    # ===============================
     # 3) PRÉDICTION SUR LA DERNIÈRE ANNÉE DISPONIBLE
-    # ===============================
-
-    # Colonnes nécessaires pour faire le test
     cols_needed = X_cols + ["score_mean_cat", "rating_mean_num", "Year", "Code"]
     df_complete = df_model.dropna(subset=cols_needed).copy()
 
     if df_complete.empty:
         print("\n⚠️ Aucune observation complète pour le test sur la dernière année.")
     else:
-        # Dernière année pour laquelle on a macro + ratings
         latest_year = int(df_complete["Year"].max())
         df_last = df_complete[df_complete["Year"] == latest_year].copy()
 
@@ -327,42 +318,30 @@ if __name__ == "__main__":
             print("===============================")
             print(f"Année testée : {latest_year}\n")
 
-            # 3.1. Construire X pour cette année
             X_last = df_last[X_cols].astype(float)
 
-            # 3.2. Prédire les probabilités par catégorie
             probs_last = result.model.predict(
                 result.params,
                 exog=X_last,
                 which="prob"
             )
-            probs_last = np.asarray(probs_last)  # (n_obs, n_categories)
+            probs_last = np.asarray(probs_last)
 
-            # 3.3. Récupérer les catégories possibles
             categories = np.sort(df_model["score_mean_cat"].dropna().unique())
-
-            # 3.4. Catégorie la plus probable
             idx_max = probs_last.argmax(axis=1)
             predicted_cat = categories[idx_max]
 
-            # 3.5. Score attendu = somme_k p_k * catégorie_k
             expected_score = (probs_last * categories).sum(axis=1)
 
-            # 3.6. Ajout au DataFrame
             df_last["predicted_cat"] = predicted_cat.astype(int)
             df_last["expected_score"] = expected_score
-
-            # Erreur vs rating moyen continu
             df_last["error_expected_vs_mean"] = (
                 df_last["expected_score"] - df_last["rating_mean_num"]
             )
-
-            # Erreur sur la catégorie (optionnel)
             df_last["error_cat_vs_score"] = (
                 df_last["predicted_cat"] - df_last["score_mean_cat"]
             )
 
-            # 3.7. Afficher le tableau des pays
             cols_show = [
                 "Code",
                 "Year",
@@ -372,28 +351,20 @@ if __name__ == "__main__":
                 "predicted_cat",
                 "error_expected_vs_mean",
             ]
+            print(df_last[cols_show].sort_values("Code"))
 
-            print(
-                df_last[cols_show]
-                .sort_values("Code")
-            )
-
-            # 3.8. MAE sur la dernière année
             mae = df_last["error_expected_vs_mean"].abs().mean()
             print(f"\nMAE (|expected_score - rating_mean_num|) sur {latest_year} : {mae:.3f}")
-
-            # 3.9. Nombre de pays avec erreur < 1 notch
             n_below_1 = (df_last["error_expected_vs_mean"].abs() < 1).sum()
             print(f"Nombre de pays avec |erreur| < 1 : {n_below_1} / {len(df_last)}")
 
-            # 3.10. Exemple : zoom sur l’Argentine (si présente)
             mask_arg = df_last["Code"] == "ARG"
             if mask_arg.any():
                 print("\n--- Zoom ARG ---")
                 print(df_last.loc[mask_arg, cols_show])
 
-
-print(df_last[df_last["error_expected_vs_mean"].abs() > 0.5][[
-    "Code", "rating_mean_num", "expected_score", "error_expected_vs_mean"
-]].sort_values("error_expected_vs_mean"))
-print(df_complete["score_mean_cat"].value_counts().sort_index())
+            # ⭐ EXPORT DES NOTES INTERNES POUR STREAMLIT
+            out_internal = df_last[["Code", "Year", "expected_score", "predicted_cat"]].copy()
+            internal_path = os.path.join(base_dir, f"internal_ratings_{latest_year}.xlsx")
+            out_internal.to_excel(internal_path, index=False)
+            print(f"\n✔️ Notes internes sauvegardées → {internal_path}")
