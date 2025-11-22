@@ -293,21 +293,6 @@ def _render_page_content(page: str):
                         f"Score continu estimé : {expected:.2f} • Catégorie : {cat} • Équivalent lettre : {letter}"
                     )
 
-        # ---- Tableau récap ----
-        st.markdown("---")
-        st.markdown(f"**Résumé des notations 2024 pour {pays}**")
-
-        row_letters = ratings_2024.loc[pays]
-        df_rec = pd.DataFrame({
-            "Agence": row_letters.index,
-            "Notation": row_letters.values
-        })
-        df_rec["Score ordinal"] = df_rec["Notation"].apply(rating_to_ordinal)
-
-        st.dataframe(df_rec.set_index("Agence"))
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
 
     # ------------------------------------------------------
     # MACRO
