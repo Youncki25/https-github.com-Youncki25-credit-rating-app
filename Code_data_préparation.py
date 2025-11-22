@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 # à chaque fois modifier le chemin ici : 
-file_path ="/Users/beldjenna/Desktop/Rating Algo/Rating_API.xlsx"
+file_path =r"C:\Users\youne\https-github.com-Youncki25-credit-rating-app\Rating_API.xlsx"
 
 # Lire l'Excel
 df = pd.read_excel(file_path)

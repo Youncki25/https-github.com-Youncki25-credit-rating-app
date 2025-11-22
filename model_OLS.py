@@ -2,29 +2,38 @@
 model_OLS_two_models.py
 
 Ce script :
-  - charge le DataFrame final (model_dataset.xlsx) déjà construit par ton modèle économétrique,
+  - charge le DataFrame final (model_dataset.xlsx),
   - construit si besoin :
-        * Deficit (% of GDP) = - Net lending/borrowing (% of GDP)
-        * default_ever = 1 si le pays a déjà fait défaut au moins une fois dans l'histoire,
+        * Deficit (% of GDP)
+        * default_ever
   - estime deux modèles OLS :
 
-    (1) OLS SANS AUCUNE INDICATRICE :
-        Rating_it = β0 + β1*Croissance + β2*Dette + β3*Intérêts + β4*Déficit
-                     + β5*Inflation + β6*CompteCourant + ε_it
+    (1) OLS SANS AUCUNE INDICATRICE
+    (2) OLS AVEC is_em ET default_ever
 
-    (2) OLS AVEC is_em ET default_ever :
-        Rating_it = β0 + β1*Croissance + β2*Dette + β3*Intérêts + β4*Déficit
-                     + β5*Inflation + β6*CompteCourant
-                     + β7*is_em_i + β8*default_ever_i + ε_it
+  - puis :
+    * teste le modèle 2 sur la DERNIÈRE ANNÉE DISPONIBLE :
+        - récupère les vraies variables macro + dummies,
+        - prédit avec le modèle,
+        - compare au rating moyen observé (rating_mean_num).
 """
 
 import pandas as pd
 import statsmodels.api as sm
 
 
-# Data déja done 
-DATA_PATH = "model_dataset.xlsx"  # généré par ton script Modéle économétrique
+# ============================
+# 0) Chemin des données
+# ============================
 
+DATA_PATH = "model_dataset.xlsx"
+# ou, si besoin :
+# DATA_PATH = r"C:\Users\youne\https-github.com-Youncki25-credit-rating-app\model_dataset.xlsx"
+
+
+# ============================
+# 1) Chargement et préparation du DataFrame
+# ============================
 
 def load_df_model(path: str = DATA_PATH) -> pd.DataFrame:
     if path.lower().endswith((".xlsx", ".xls")):
@@ -36,12 +45,12 @@ def load_df_model(path: str = DATA_PATH) -> pd.DataFrame:
     print("Shape :", df.shape)
     print("Colonnes disponibles :", list(df.columns), "\n")
 
-    # 1) Construire 'Deficit (% of GDP)' si absent
-    #    Net lending/borrowing > 0 = surplus, < 0 = déficit
+    # Deficit si manquant
     if "Deficit (% of GDP)" not in df.columns and "Net lending/borrowing (% of GDP)" in df.columns:
         df["Deficit (% of GDP)"] = -df["Net lending/borrowing (% of GDP)"]
-        print("→ Colonne 'Deficit (% of GDP)' construite à partir de 'Net lending/borrowing (% of GDP)'.\n")
+        print("→ Colonne 'Deficit (% of GDP)' construite.\n")
 
+    # default_ever si manquant
     if "default_dummy" in df.columns and "default_ever" not in df.columns:
         df["default_ever"] = (
             df.sort_values(["Code", "Year"])
@@ -49,23 +58,16 @@ def load_df_model(path: str = DATA_PATH) -> pd.DataFrame:
               .transform(lambda s: s.cummax())
               .astype(int)
         )
-        print("→ Colonne 'default_ever' construite (1 si le pays a déjà fait défaut au moins une fois).\n")
+        print("→ Colonne 'default_ever' construite.\n")
 
     return df
 
-# Modéle 1: OLS sans indicatrices
-def ols_without_indicators(df: pd.DataFrame):
-    """
-    Rating_it = β0
-                + β1 * GDPgrowth_it
-                + β2 * Debtpib_it
-                + β3 * Interest_it
-                + β4 * Deficit_it
-                + β5 * Inflation_it
-                + β6 * CAB_it
-                + ε_it
-    """
 
+# ============================
+# 2) Modèle 1 : OLS sans indicatrices
+# ============================
+
+def ols_without_indicators(df: pd.DataFrame):
     X_cols = [
         "GDP growth (annual %)",
         "Debt (% of GDP)",
@@ -77,7 +79,6 @@ def ols_without_indicators(df: pd.DataFrame):
 
     missing = [c for c in X_cols if c not in df.columns]
     if missing:
-        # Check si tt les colonnes dans le df
         raise ValueError(f"Colonnes manquantes pour le modèle OLS sans indicatrices : {missing}")
 
     df_clean = df.dropna(subset=X_cols + ["rating_mean_num"]).copy()
@@ -97,23 +98,11 @@ def ols_without_indicators(df: pd.DataFrame):
     return model
 
 
-# Modéle 2 : OLS avec is_em et default_ever
-def ols_with_isem_and_default_history(df: pd.DataFrame):
-    """
-    Rating_it = β0
-                + β1 * GDPgrowth_it
-                + β2 * Debtpib_it
-                + β3 * Interest_it
-                + β4 * Deficit_it
-                + β5 * Inflation_it
-                + β6 * CAB_it
-                + β7 * is_em_i
-                + β8 * default_ever_i
-                + ε_it
-      - is_em_i = 1 si le pays i est un pays émergent, 0 sinon
-      - default_ever_i = 1 si le pays i a déjà fait défaut au moins une fois (sur toute l'histoire)
-    """
+# ============================
+# 3) Modèle 2 : OLS avec is_em + default_ever
+# ============================
 
+def ols_with_isem_and_default_history(df: pd.DataFrame):
     X_cols = [
         "GDP growth (annual %)",
         "Debt (% of GDP)",
@@ -121,8 +110,8 @@ def ols_with_isem_and_default_history(df: pd.DataFrame):
         "Deficit (% of GDP)",
         "Inflation, consumer prices (annual %)",
         "Current account balance (% of GDP)",
-        "is_em", # dummy 1
-        "default_ever", # dummy 2
+        "is_em",
+        "default_ever",
     ]
 
     missing = [c for c in X_cols if c not in df.columns]
@@ -143,44 +132,63 @@ def ols_with_isem_and_default_history(df: pd.DataFrame):
     print("===============================\n")
     print(model.summary())
 
+    return model
 
-# Prédiction
+
+# ============================
+# 4) MAIN + TEST DERNIÈRE ANNÉE
+# ============================
+
 if __name__ == "__main__":
+    # 1) Charger data
     df_model = load_df_model(DATA_PATH)
-# estimer Model 1
-    res_ols_no_indic = ols_without_indicators(df_model)
 
-# estimer Model 2
+    # 2) Estimer modèles
+    res_ols_no_indic = ols_without_indicators(df_model)
     res_ols_with_indic = ols_with_isem_and_default_history(df_model)
 
-        # ===============================
-    # 4) EXEMPLE DE PRÉDICTION
-    # ===============================
+    # On utilise le modèle 2 pour tester
+    model_for_prediction =  res_ols_no_indic
 
-    model_for_prediction = res_ols_with_indic   # modèle 2
+    # 3) Test sur la dernière année dispo
+    X_cols_ols2 = [
+        "GDP growth (annual %)",
+        "Debt (% of GDP)",
+        "Interest payments (% of GDP)",
+        "Deficit (% of GDP)",
+        "Inflation, consumer prices (annual %)",
+        "Current account balance (% of GDP)",
+        #"is_em",
+        #"default_ever",
+    ]
 
-    X_new = {
-        "GDP growth (annual %)": 0.725,
-        "Debt (% of GDP)": 134.6,
-        "Interest payments (% of GDP)": 5.0,
-        "Deficit (% of GDP)": 4.1,
-        "Inflation, consumer prices (annual %)": 2.0,
-        "Current account balance (% of GDP)": -3.0,
-        "is_em": 0,
-        "default_ever": 0,
-    }
+    df_complete = df_model.dropna(subset=X_cols_ols2 + ["rating_mean_num", "Year"]).copy()
 
-    X_new_df = pd.DataFrame([X_new])
+    if df_complete.empty:
+        print("\n⚠️ Aucune observation complète pour le test sur la dernière année.")
+    else:
+        latest_year = int(df_complete["Year"].max())
+        df_last = df_complete[df_complete["Year"] == latest_year].copy()
 
-    # IMPORTANT : ajouter la constante
-    X_new_df = sm.add_constant(X_new_df, has_constant='add')
+        if df_last.empty:
+            print(f"\n⚠️ Aucune observation pour l'année {latest_year}.")
+        else:
+            X_last = df_last[X_cols_ols2]
+            X_last = sm.add_constant(X_last, has_constant='add')
 
-    print("\nColonnes X_new_df :", X_new_df.columns)
-    print("Colonnes modèle :", model_for_prediction.params.index)
+            y_last_pred = model_for_prediction.predict(X_last)
 
-    y_pred = model_for_prediction.predict(X_new_df)
+            df_last["rating_pred"] = y_last_pred
+            df_last["error"] = df_last["rating_pred"] - df_last["rating_mean_num"]
+            print("   TEST SUR LA DERNIÈRE ANNÉE DISPONIBLE")
+            print("===============================")
+            print(f"Année testée : {latest_year}\n")
 
-    print("\n===============================")
-    print("   EXEMPLE DE PRÉDICTION")
-    print("===============================")
-    print("Rating prédit (score numérique) :", float(y_pred.values[0]))
+            print(
+                df_last[["Code", "Year", "rating_mean_num", "rating_pred", "error"]]
+                .sort_values("Code")
+                .head(50)  # tu peux enlever .head si tu veux tout
+            )
+
+            mae = df_last["error"].abs().mean()
+            print(f"\nMAE (erreur absolue moyenne) sur {latest_year} : {mae:.3f}")

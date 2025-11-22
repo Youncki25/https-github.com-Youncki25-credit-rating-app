@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 from statsmodels.miscmodels.ordinal_model import OrderedModel
 
-# ================================
-# 0) CONFIG INDICATEURS WB
-# ================================
+# =======================================================================================
+# 0) LISTE DES INDICATEURS WB
+# =======================================================================================
 
 WB_INDICATORS_CANON = [
     "GDP growth (annual %)", 
@@ -21,33 +21,26 @@ WB_INDICATORS_CANON = [
     "Political Stability and Absence of Violence",
 ]
 
-
-# ================================
-# 1) OUTILS WB
-# ================================
+# =======================================================================================
+# 1) STANDARDISATION DES FICHIERS WB
+# =======================================================================================
 
 def _standardize_wb_columns(df: pd.DataFrame, file_path: str | None = None) -> pd.DataFrame:
-    """
-    Standardise les colonnes WB pour qu'elles aient :
-      - une colonne 'Year' numérique
-      - uniquement les colonnes de WB_INDICATORS_CANON
-    """
     fname = os.path.basename(file_path) if file_path else "WB_file"
     print(f"   Colonnes brutes WB ({fname}) : {list(df.columns)}")
 
-    # Détection de la colonne année
+    # Trouver la colonne année
     year_col = None
     for cand in ["Year", "year", "YEAR", "date", "Date", "DATE"]:
         if cand in df.columns:
             year_col = cand
             break
-
     if year_col is None:
+        # Excel foireux : années dans "Unnamed"
         for c in df.columns:
             if "Unnamed" in str(c):
                 year_col = c
                 break
-
     if year_col is None:
         raise ValueError(f"Impossible de trouver la colonne année dans {fname}.")
 
@@ -55,7 +48,7 @@ def _standardize_wb_columns(df: pd.DataFrame, file_path: str | None = None) -> p
         print(f"   → Colonne année détectée '{year_col}', renommée en 'Year'")
         df = df.rename(columns={year_col: "Year"})
 
-    # Conversion en année numérique
+    # Conversion de Year → entier
     if not np.issubdtype(df["Year"].dtype, np.number):
         year_conv = pd.to_datetime(df["Year"], errors="coerce")
         if year_conv.notna().any():
@@ -63,10 +56,10 @@ def _standardize_wb_columns(df: pd.DataFrame, file_path: str | None = None) -> p
         else:
             df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
 
-    df = df[~df["Year"].isna()].copy()
+    df = df.dropna(subset=["Year"]).copy()
     df["Year"] = df["Year"].astype(int)
 
-    # Harmonisation des noms
+    # Harmonisation noms
     rename_map = {
         "Currrent account balance (% of GDP)": "Current account balance (% of GDP)",
         "Current account balancce (% of GDP)": "Current account balance (% of GDP)",
@@ -79,35 +72,29 @@ def _standardize_wb_columns(df: pd.DataFrame, file_path: str | None = None) -> p
 
     return df[cols_to_keep].copy()
 
+# =======================================================================================
+# 2) CHARGEMENT DU PANEL WB
+# =======================================================================================
 
 def load_wb_panel(base_dir: str) -> pd.DataFrame:
-    """
-    Lit tous les fichiers {CODE}_WB_timeseries.xlsx dans base_dir
-    et construit un panel WB avec :
-      - Year
-      - indicateurs macro
-      - Code
-      - Country (ici = Code)
-    → PREND AUTOMATIQUEMENT TOUS LES PAYS
-    """
-    print("\n===============================")
     print(" 1) LECTURE DES DONNÉES WB")
-    print("===============================")
 
     files = glob.glob(os.path.join(base_dir, "*_WB_timeseries.xlsx"))
     print(f"→ Fichiers WB détectés : {files}\n")
 
     if not files:
-        raise FileNotFoundError("Aucun fichier *_WB_timeseries.xlsx trouvé dans base_dir.")
+        raise FileNotFoundError("Aucun fichier *_WB_timeseries.xlsx trouvé.")
 
     all_list = []
     for path in files:
         print(f"→ Lecture fichier WB : {path}")
         df_raw = pd.read_excel(path)
         df = _standardize_wb_columns(df_raw, file_path=path)
+
         code = os.path.basename(path).split("_")[0]
         df["Code"] = code
         df["Country"] = code
+
         all_list.append(df)
         print("   ✔️ Lecture OK\n")
 
@@ -115,127 +102,72 @@ def load_wb_panel(base_dir: str) -> pd.DataFrame:
     print(f"✔️ WB Panel construit. Shape : {wb_panel.shape}\n")
     return wb_panel
 
-
-# ================================
-# 2) LECTURE DES RATINGS (Rating_API.xlsx)
-# ================================
+# =======================================================================================
+# 3) RATINGS — ANNUALISATION + COMPLETION
+# =======================================================================================
 
 def load_ratings(base_dir: str, wb_panel: pd.DataFrame) -> pd.DataFrame:
-    """
-    Charge Rating_API.xlsx (chemin absolu donné), construit :
-      - une note moyenne numérique par (Country, Code, Year)
-      - complétée par la donnée la plus proche si une année manque (nearest)
-    """
-    print("\n===============================")
     print(" 2) LECTURE DES RATINGS")
-    print("===============================")
 
-    # Chemin absolu fourni
-    path = "/Users/beldjenna/Desktop/Rating Algo/Rating_API.xlsx"
-    print(f"→ Fichier de ratings utilisé : {path}")
+    path = os.path.join(base_dir, "Rating_API.xlsx")
+    print(f"→ Fichier utilisé : {path}")
 
     df = pd.read_excel(path)
     df.columns = [c.strip() for c in df.columns]
 
-    print(f"   Colonnes brutes Ratings : {list(df.columns)}")
-
-    # On part toujours d’une annualisation propre :
-    # moyenne par (Country, Code, Year) de rating_mean_num
     if "rating_mean_num" not in df.columns or "Year" not in df.columns:
-        raise ValueError("Rating_API.xlsx doit contenir au moins 'Year' et 'rating_mean_num'.")
+        raise ValueError("Il faut au moins 'Year' et 'rating_mean_num' dans Rating_API.xlsx.")
 
+    # Annualisation par moyenne
     df_year = (
         df.groupby(["Country", "Code", "Year"], as_index=False)["rating_mean_num"]
           .mean()
     )
 
-    # S'assurer qu'on a les colonnes clés
-    needed = ["Country", "Code", "Year", "rating_mean_num"]
-    missing = [c for c in needed if c not in df_year.columns]
-    if missing:
-        raise ValueError(f"Colonnes manquantes dans ratings annualisés : {missing}")
-
-    # Restreindre aux pays présents dans WB (notre univers de modèle)
+    # On garde seulement codes présents dans WB
     wb_codes = wb_panel["Code"].unique()
     df_year = df_year[df_year["Code"].isin(wb_codes)].copy()
 
-    print(f"✔️ Ratings annuels chargés. Shape : {df_year.shape}")
-
-    # Compléter les années manquantes par pays en prenant la valeur la plus proche
-    print("→ Complétion des années manquantes (rating_mean_num) par pays (nearest)...")
-
-    def _fill_nearest(group: pd.DataFrame) -> pd.DataFrame:
-        # On trie par année et on s'assure d'un seul enregistrement par Year
+    # Compléter années manquantes → interpolation nearest
+    def _fill_nearest(group):
         group = group.sort_values("Year")
-        group = (
-            group.groupby("Year", as_index=True)
-                 .agg({
-                     "rating_mean_num": "mean",
-                     "Code": "first",
-                     "Country": "first",
-                 })
-        )
+        group = group.groupby("Year", as_index=True).agg({
+            "rating_mean_num": "mean",
+            "Code": "first",
+            "Country": "first",
+        })
 
         code = group["Code"].iloc[0]
-
-        # Grille d'années basée sur WB pour ce pays
-        years_wb = wb_panel[wb_panel["Code"] == code]["Year"]
-        if years_wb.empty:
+        years = wb_panel[wb_panel["Code"] == code]["Year"]
+        if years.empty:
             return group.reset_index()
 
-        year_min = int(years_wb.min())
-        year_max = int(years_wb.max())
-        full_years = range(year_min, year_max + 1)
-
-        # Reindex sur toutes les années WB (index = Year, unique donc OK)
+        full_years = range(int(years.min()), int(years.max()) + 1)
         group = group.reindex(full_years)
 
-        # Re-remplir Code / Country
         group["Code"] = code
-        country_val = group["Country"].dropna().iloc[0] if group["Country"].notna().any() else code
-        group["Country"] = country_val
-
-        # Interpolation nearest sur rating_mean_num
-        group["rating_mean_num"] = (
-            group["rating_mean_num"]
-            .astype(float)
-            .interpolate(method="nearest", limit_direction="both")
-        )
-
+        group["Country"] = group["Country"].dropna().iloc[0]
+        group["rating_mean_num"] = group["rating_mean_num"].interpolate("nearest", limit_direction="both")
         group["Year"] = group.index
         return group.reset_index(drop=True)
 
-    df_filled = (
-        df_year.groupby("Code", group_keys=False)
-               .apply(_fill_nearest)
-    )
+    df_filled = df_year.groupby("Code", group_keys=False).apply(_fill_nearest)
 
-    print(f"✔️ Ratings complétés (nearest). Shape : {df_filled.shape}\n")
+    print(f"✔️ Ratings complétés. Shape : {df_filled.shape}\n")
     return df_filled[["Country", "Code", "Year", "rating_mean_num"]]
 
+# =======================================================================================
+# 4) DEFAULTS
+# =======================================================================================
 
-# ================================
-# 3) LECTURE DES DONNÉES DE DÉFAUT
-# ================================
-
-def load_defaults() -> pd.DataFrame:
-    """
-    Charge les défauts depuis le fichier Crédit_rating.xlsm.
-    Le fichier contient :
-       - Year
-       - colonnes de pays déjà en codes ISO3 (ARG, FRA, GRC, VEN, etc.)
-    On convertit en format long : Year, Code, default_dummy.
-    """
-    print("\n===============================")
+def load_defaults(base_dir: str) -> pd.DataFrame:
     print(" 3) LECTURE DES DÉFAUTS")
-    print("===============================")
 
-    path = "/Users/beldjenna/Desktop/Rating Algo/Crédit_rating.xlsm"
-    print(f"→ Fichier de défauts utilisé : {path}")
+    path = os.path.join(base_dir, "Crédit_rating.xlsm")
+    print(f"→ Fichier utilisé : {path}")
 
     df_def = pd.read_excel(path)
 
-    # Harmonisation colonne Year
     if "Year" not in df_def.columns:
         df_def = df_def.rename(columns={"Unnamed: 0": "Year"})
 
@@ -243,58 +175,60 @@ def load_defaults() -> pd.DataFrame:
     df_def = df_def.dropna(subset=["Year"])
     df_def["Year"] = df_def["Year"].astype(int)
 
-    # Toutes les colonnes sauf Year & Pays sont déjà des codes ISO3
     code_cols = [c for c in df_def.columns if c not in ("Year", "Pays")]
 
-    # Format long
     df_long = df_def.melt(
         id_vars=["Year"],
         value_vars=code_cols,
         var_name="Code",
         value_name="default_dummy"
     )
-
     df_long["default_dummy"] = df_long["default_dummy"].fillna(0).astype(int)
 
-    print("✔️ Defaults chargés → format long (Year, Code, default_dummy)\n")
+    print("✔️ Defaults → format long\n")
     return df_long
 
-
-
-# ================================
-# 4) CONSTRUCTION DU DATASET
-# ================================
+# =======================================================================================
+# 5) BUILD MODEL DATASET — AVEC AR(1)
+# =======================================================================================
 
 def build_model_dataset(base_dir: str) -> pd.DataFrame:
-    print("\n===============================")
-    print(" 4) CONSTRUCTION DU DATASET FINAL")
-    print("===============================")
+    print("4) CONSTRUCTION DU DATASET FINAL")
 
     wb_panel = load_wb_panel(base_dir)
     ratings = load_ratings(base_dir, wb_panel)
-    defaults = load_defaults()
+    defaults = load_defaults(base_dir)
 
-    # Merge WB + Ratings
+    # Merge WB + Ratings + Defaults
     df = wb_panel.merge(ratings, on=["Code", "Year"], how="left")
-
-    # Merge Defaults
     df = df.merge(defaults, on=["Code", "Year"], how="left")
     df["default_dummy"] = df["default_dummy"].fillna(0).astype(int)
 
-    # EM dummy (liste à ajuster si tu veux)
-    EM = {"ARG", "ECU", "EGY", "VNM", "ZAF"}
+    # EM dummy
+    EM = {
+        "ARG","BRA","CHL","CHN","COL","ECU","EGY","HUN","IDN","IND",
+        "MEX","MYS","PER","PHL","POL","ROU","THA","TUR","URY","VNM","ZAF"
+    }
     df["is_em"] = df["Code"].isin(EM).astype(int)
 
-    # Lag défaut
     df = df.sort_values(["Code", "Year"])
-    df["default_lag"] = df.groupby("Code")["default_dummy"].shift(1).fillna(0).astype(int)
 
-    # Imputation NA sur macro et gouvernance
+    # Default lag cumulatif
+    df["default_lag"] = df.groupby("Code")["default_dummy"].transform(lambda s: s.cummax())
+
+    # ⭐⭐⭐ AR(1) : rating(t-1) = lag du rating continu
+    df["rating_lag"] = df.groupby("Code")["rating_mean_num"].shift(1)
+
+    # Interpolation macro
     macro_cols = [
-        "GDP growth (annual %)", "GDP per capita (current US$)",
-        "Inflation, consumer prices (annual %)", "Trade openness (% of GDP)",
-        "Net lending/borrowing (% of GDP)", "Current account balance (% of GDP)",
-        "Debt (% of GDP)", "Interest payments (% of GDP)"
+        "GDP growth (annual %)",
+        "GDP per capita (current US$)",
+        "Inflation, consumer prices (annual %)",
+        "Trade openness (% of GDP)",
+        "Net lending/borrowing (% of GDP)",
+        "Current account balance (% of GDP)",
+        "Debt (% of GDP)",
+        "Interest payments (% of GDP)",
     ]
     gouv_cols = ["Control of Corruption", "Political Stability and Absence of Violence"]
 
@@ -305,53 +239,45 @@ def build_model_dataset(base_dir: str) -> pd.DataFrame:
         lambda g: g.astype(float).bfill().ffill()
     )
 
-    # Déficit = - net lending/borrowing (% PIB)
+    # Déficit
     df["Deficit (% of GDP)"] = -df["Net lending/borrowing (% of GDP)"]
 
-    # Variable de score ordinal (catégorie la plus proche)
+    # Score ordinal
     df["score_mean_cat"] = df["rating_mean_num"].round().astype("Int64")
 
-    # Variables explicatives retenues
+    # Colonnes du modèle (AR inclus)
     X_cols = [
         "GDP growth (annual %)",
+        "GDP per capita (current US$)",
         "Debt (% of GDP)",
-        "Interest payments (% of GDP)",
         "Deficit (% of GDP)",
         "Inflation, consumer prices (annual %)",
         "Current account balance (% of GDP)",
+        "Control of Corruption",
+        "Interest payments (% of GDP)",
         "is_em",
         "default_lag",
+        "rating_lag",              # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< AR(1)
     ]
 
-    # On ne garde que les lignes où tout est dispo
     df_model = df.dropna(subset=X_cols + ["score_mean_cat"]).copy()
 
-    # Sauvegarde pour inspection
     out_path = os.path.join(base_dir, "model_dataset.xlsx")
     df_model.to_excel(out_path, index=False)
     print(f"✔️ Dataset final sauvegardé → {out_path}\n")
 
-    return df_model
+    return df_model, X_cols
 
 
-# ================================
-# 5) ESTIMATION DU MODÈLE
-# ================================
+# =======================================================================================
+# 6) ESTIMATION DU MODÈLE ORDINAL (AVEC AR(1))
+# =======================================================================================
 
 def estimate_ordered_model(base_dir: str):
-    df_model = build_model_dataset(base_dir)
+    # On récupère le dataset + la liste exacte des X
+    df_model, X_cols = build_model_dataset(base_dir)
 
-    X_cols = [
-        "GDP growth (annual %)",
-        "Debt (% of GDP)",
-        "Interest payments (% of GDP)",
-        "Deficit (% of GDP)",
-        "Inflation, consumer prices (annual %)",
-        "Current account balance (% of GDP)",
-        "is_em",
-        "default_lag",
-    ]
-
+    # Variable dépendante = score ordinal
     y = df_model["score_mean_cat"].astype(int)
     X = df_model[X_cols]
 
@@ -362,90 +288,106 @@ def estimate_ordered_model(base_dir: str):
     return result, df_model, X_cols
 
 
-# ================================
-# 6) MAIN + EXEMPLE DE PRÉDICTION
-# ================================
+# =======================================================================================
+# 7) MAIN : ESTIMATION + TEST SUR LA DERNIÈRE ANNÉE
+# =======================================================================================
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
+    # 1) Estimation du modèle ordinal
     result, df_model, X_cols = estimate_ordered_model(base_dir)
 
-    # Exemple de vecteur de caractéristiques (à adapter)
-    X_new = {
-        "GDP growth (annual %)": -0.23,
-        "Debt (% of GDP)": 63.5,
-        "Interest payments (% of GDP)": 1.5,
-        "Deficit (% of GDP)": 2.5,
-        "Inflation, consumer prices (annual %)": 2.25,
-        "Current account balance (% of GDP)": 5.66,
-        "is_em": 0,         # 0 = DM, 1 = EM
-        "default_lag": 0,   # 1 si défaut l'année précédente
-    }
-
-    X_new_df = pd.DataFrame([X_new])[X_cols]
-
-    # Probabilités par catégorie
-    probs = result.model.predict(result.params, exog=X_new_df, which="prob")
-
-    # Récupérer les catégories observées
-    categories = np.sort(df_model["score_mean_cat"].dropna().unique())
-
-    idx_max = int(np.argmax(probs[0]))
-    predicted_cat = int(categories[idx_max])
-
-    expected_score = float((probs[0] * categories).sum())
-
+    # 2) Distribution des scores observés
     print("\n===============================")
-    print("   PRÉDICTION AVEC LE MODÈLE ORDINAL")
-    print("===============================")
-    print("Probabilités par catégorie (dans l'ordre des catégories) :")
-    for c, p in zip(categories, probs[0]):
-        print(f"  P(score = {int(c)}) = {p:.4f}")
-    print(f"\nCatégorie la plus probable      : {predicted_cat}")
-    print(f"Score attendu (valeur moyenne)  : {expected_score:.2f}")
+    print(" DISTRIBUTION DES SCORES OBSERVÉS")
+    print("===============================\n")
+    print(df_model["score_mean_cat"].value_counts().sort_index())
 
-      # ================================
-    # 7) TEST : PREDIRE POUR UN PAYS ALÉATOIRE EN 2024
-    # ================================
-    print("\n====================================")
-    print(" TEST SUR UN PAYS ALÉATOIRE (année 2024)")
-    print("====================================")
+    # ===============================
+    # 3) PRÉDICTION SUR LA DERNIÈRE ANNÉE DISPONIBLE
+    # ===============================
 
-    # 1. On filtre les observations de 2024
-    df_2024 = df_model[df_model["Year"] == 2024].copy()
+    # Colonnes nécessaires pour faire le test
+    cols_needed = X_cols + ["score_mean_cat", "rating_mean_num", "Year", "Code"]
+    df_complete = df_model.dropna(subset=cols_needed).copy()
 
-    if df_2024.empty:
-        print("⚠️ Aucun pays dans df_model pour l’année 2024 !")
+    if df_complete.empty:
+        print("\n⚠️ Aucune observation complète pour le test sur la dernière année.")
     else:
-        # 2. Choisir un pays aléatoire (on garde un DataFrame, pas une Series)
-        random_row = df_2024.sample(1)  # DataFrame 1 ligne
-        code_test = random_row["Code"].iloc[0]
-        true_score = int(random_row["score_mean_cat"].iloc[0])
+        # Dernière année pour laquelle on a macro + ratings
+        latest_year = int(df_complete["Year"].max())
+        df_last = df_complete[df_complete["Year"] == latest_year].copy()
 
-        print(f"Pays sélectionné : {code_test}")
-        print(f"Note réelle 2024 : {true_score}")
+        if df_last.empty:
+            print(f"\n⚠️ Aucune observation pour l'année {latest_year}.")
+        else:
+            print("\n===============================")
+            print("   TEST SUR LA DERNIÈRE ANNÉE DISPONIBLE")
+            print("===============================")
+            print(f"Année testée : {latest_year}\n")
 
-        # 3. Construire le vecteur X_test à partir des données réelles
-        #    et s'assurer qu'il est bien numérique
-        X_test = random_row[X_cols].astype(float)
+            # 3.1. Construire X pour cette année
+            X_last = df_last[X_cols].astype(float)
 
-        # 4. Prédire les probas
-        probs_test = result.model.predict(result.params, exog=X_test, which="prob")
+            # 3.2. Prédire les probabilités par catégorie
+            probs_last = result.model.predict(
+                result.params,
+                exog=X_last,
+                which="prob"
+            )
+            probs_last = np.asarray(probs_last)  # (n_obs, n_categories)
 
-        # 5. Trouver la catégorie prédite
-        categories_sorted = np.sort(df_model["score_mean_cat"].dropna().unique())
-        idx_pred = int(np.argmax(probs_test[0]))
-        predicted_score = int(categories_sorted[idx_pred])
+            # 3.3. Récupérer les catégories possibles
+            categories = np.sort(df_model["score_mean_cat"].dropna().unique())
 
-        print("\nProbabilités par catégorie :")
-        for c, p in zip(categories_sorted, probs_test[0]):
-            print(f"  P(score = {int(c)}) = {p:.4f}")
+            # 3.4. Catégorie la plus probable
+            idx_max = probs_last.argmax(axis=1)
+            predicted_cat = categories[idx_max]
 
-        expected_score = float((probs_test[0] * categories_sorted).sum())
+            # 3.5. Score attendu = somme_k p_k * catégorie_k
+            expected_score = (probs_last * categories).sum(axis=1)
 
-        print("\n🎯 Résultat test :")
-        print(f"  - Pays            : {code_test}")
-        print(f"  - Note réelle     : {true_score}")
-        print(f"  - Note prédite    : {predicted_score}")
-        print(f"  - Score attendu   : {expected_score:.2f}")
+            # 3.6. Ajout au DataFrame
+            df_last["predicted_cat"] = predicted_cat.astype(int)
+            df_last["expected_score"] = expected_score
+
+            # Erreur vs rating moyen continu
+            df_last["error_expected_vs_mean"] = (
+                df_last["expected_score"] - df_last["rating_mean_num"]
+            )
+
+            # Erreur sur la catégorie (optionnel)
+            df_last["error_cat_vs_score"] = (
+                df_last["predicted_cat"] - df_last["score_mean_cat"]
+            )
+
+            # 3.7. Afficher le tableau des pays
+            cols_show = [
+                "Code",
+                "Year",
+                "rating_mean_num",
+                "score_mean_cat",
+                "expected_score",
+                "predicted_cat",
+                "error_expected_vs_mean",
+            ]
+
+            print(
+                df_last[cols_show]
+                .sort_values("Code")
+            )
+
+            # 3.8. MAE sur la dernière année
+            mae = df_last["error_expected_vs_mean"].abs().mean()
+            print(f"\nMAE (|expected_score - rating_mean_num|) sur {latest_year} : {mae:.3f}")
+
+            # 3.9. Nombre de pays avec erreur < 1 notch
+            n_below_1 = (df_last["error_expected_vs_mean"].abs() < 1).sum()
+            print(f"Nombre de pays avec |erreur| < 1 : {n_below_1} / {len(df_last)}")
+
+            # 3.10. Exemple : zoom sur l’Argentine (si présente)
+            mask_arg = df_last["Code"] == "ARG"
+            if mask_arg.any():
+                print("\n--- Zoom ARG ---")
+                print(df_last.loc[mask_arg, cols_show])
