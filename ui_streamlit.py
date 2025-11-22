@@ -85,6 +85,18 @@ MOODYS_TO_SP = {
     "C": "C",
 }
 
+def score_to_rating(score: int) -> str:
+    """
+    Convertit un score ordinal (1–22) en notation S&P/Fitch/Moody's harmonisée.
+    """
+    if score is None or pd.isna(score):
+        return "N/A"
+    score = int(score)
+    if 1 <= score <= len(RATING_ORDER):
+        return RATING_ORDER[score - 1]  # score=1 → RATING_ORDER[0]
+    return "N/A"
+
+
 def rating_to_ordinal(rating: Optional[str]) -> Optional[int]:
     """
     Convertit une notation en score ordinal (1 = AAA, ..., 22 = D)
@@ -372,18 +384,20 @@ def _render_page_content(page: str):
                     st.warning(f"Aucune note interne disponible pour {code} en {target_year}.")
                 else:
                     expected_score = row["expected_score"].iloc[0]
+                    cat = int(row["predicted_cat"].iloc[0])
+                    rating_letter = score_to_rating(cat)
+
                     st.markdown(
-                        f"💡 **Note interne (score attendu) {target_year} pour {code} :** "
-                        f"<span style='font-size:22px; font-weight:bold;'>{expected_score:.2f}</span>",
+                        f"💡 **Note interne {target_year} pour {code} : "
+                        f"<span style='font-size:24px; font-weight:bold;'>{rating_letter} ({cat})</span>**",
                         unsafe_allow_html=True
                     )
-                    if "predicted_cat" in row.columns:
-                        cat = int(row["predicted_cat"].iloc[0])
-                        st.caption(
-                            f"Catégorie ordinale la plus probable (échelle interne) : {cat} "
-                            "(1 = AAA, 22 = D, même grille que les agences)."
-                        )
 
+                    st.caption(
+                        f"Score continu estimé par le modèle : {expected_score:.2f} "
+                        f"• Catégorie ordinale : {cat} "
+                        f"• Notation équivalente : {rating_letter}"
+                    )
         # ========= 3) Tableau récap : lettres + scores pour TOUTES les agences =========
         st.markdown("---")
         st.markdown(f"**Résumé des notations 2024 pour {pays} (agences externes)**")
