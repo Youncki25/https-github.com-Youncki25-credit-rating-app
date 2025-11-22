@@ -1,11 +1,24 @@
 # ui_streamlit.py
-import streamlit as st
-from dataclasses import dataclass
+import os
 from typing import Optional, List, Dict
-import base64, os, uuid, glob
+
+import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # si tu en as besoin plus tard
+
 from macro_graphs import render_macro_page
+
+# Import depuis tes nouveaux modules
+from ratings_utils import (
+    RATING_ORDER,
+    RATING_TO_SCORE,
+    MOODYS_TO_SP,
+    score_to_rating,
+    rating_to_ordinal,
+    load_ratings_2024,
+    load_internal_ratings,
+)
+from analysts_ui import Analyst, build_from_config, render_profiles_panel
 
 try:
     from script import ANALYSTS_CONFIG  # [{name, role, photo}, ...]
@@ -34,86 +47,9 @@ hr { border: none; border-top: 1px solid var(--line); margin: 0.75rem 0; }
 
 
 # --------------------------------------------------------------------
-# 📌 Mapping des notations vers score ordinal commun (1–22)
+# 🧭 Sidebar / Navigation
 # --------------------------------------------------------------------
-
-RATING_ORDER = [
-    "AAA","AA+","AA","AA-","A+","A","A-",
-    "BBB+","BBB","BBB-","BB+","BB","BB-",
-    "B+","B","B-","CCC+","CCC","CCC-","CC","C","D"
-]
-
-RATING_TO_SCORE = {r: i + 1 for i, r in enumerate(RATING_ORDER)}
-
-MOODYS_TO_SP = {
-    "Aaa":"AAA","Aa1":"AA+","Aa2":"AA","Aa3":"AA-",
-    "A1":"A+","A2":"A","A3":"A-",
-    "Baa1":"BBB+","Baa2":"BBB","Baa3":"BBB-",
-    "Ba1":"BB+","Ba2":"BB","Ba3":"BB-",
-    "B1":"B+","B2":"B","B3":"B-",
-    "Caa1":"CCC+","Caa2":"CCC","Caa3":"CCC-",
-    "Ca":"CC","C":"C"
-}
-
-def score_to_rating(score: int) -> str:
-    """Convertit un score ordinal (1–22) → notation AAA–D."""
-    if score is None or pd.isna(score):
-        return "N/A"
-    score = int(score)
-    if 1 <= score <= len(RATING_ORDER):
-        return RATING_ORDER[score - 1]
-    return "N/A"
-
-def rating_to_ordinal(r: Optional[str]) -> Optional[int]:
-    """Convertit notation S&P / Fitch / Moody’s → score ordinal."""
-    if r is None or (isinstance(r, float) and pd.isna(r)):
-        return None
-    r = str(r).strip()
-    if r.upper() in RATING_TO_SCORE:
-        return RATING_TO_SCORE[r.upper()]
-    if r in MOODYS_TO_SP:
-        return RATING_TO_SCORE.get(MOODYS_TO_SP[r])
-    return None
-
-
-# --------------------------------------------------------------------
-# 👥 Gestion des profils d'analystes
-# --------------------------------------------------------------------
-
-@dataclass
-class Analyst:
-    id: str
-    name: str
-    role: str
-    b64: Optional[str] = None
-    validated: bool = False
-
-
-def _img_to_b64(path: str):
-    if not path or not os.path.exists(path):
-        return None
-    try:
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    except:
-        return None
-
-def _build_from_config(config: List[Dict]):
-    out = []
-    for a in config:
-        out.append(
-            Analyst(
-                id=str(uuid.uuid4()),
-                name=a.get("name", "Analyste"),
-                role=a.get("role", ""),
-                b64=_img_to_b64(a.get("photo", "")),
-                validated=False,
-            )
-        )
-    return out
-
-
-def _render_sidebar():
+def _render_sidebar() -> str:
     st.sidebar.markdown("### Menu")
     page = st.sidebar.radio(
         "Navigation",
@@ -124,88 +60,9 @@ def _render_sidebar():
     return page
 
 
-def _render_profiles_panel():
-    st.markdown("### Profils")
-    if not st.session_state.profiles:
-        st.caption("Aucun profil. Cliquez sur Reset.")
-    else:
-        for prof in st.session_state.profiles:
-            c1, c2, c3, c4 = st.columns([1,3,1,1])
-            with c1:
-                if prof.b64:
-                    st.markdown(
-                        f"<img class='face' src='data:image/png;base64,{prof.b64}'/>",
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown("<div class='card small'>Image manquante</div>", unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"**{prof.name}**<br/>{prof.role}", unsafe_allow_html=True)
-            with c3:
-                prof.validated = st.checkbox("Valider", value=prof.validated, key=f"val_{prof.id}")
-            with c4:
-                if st.button("Supprimer", key=f"del_{prof.id}"):
-                    st.session_state.profiles = [p for p in st.session_state.profiles if p.id != prof.id]
-                    st.experimental_rerun()
-
-    st.markdown("---")
-    if st.button("🔄 Reset depuis script.py"):
-        st.session_state.profiles = _build_from_config(ANALYSTS_CONFIG)
-        st.experimental_rerun()
-
-
-# --------------------------------------------------------------------
-# 📊 Chargement des ratings agences
-# --------------------------------------------------------------------
-
-@st.cache_data
-def load_ratings_2024(path="rating2.xlsx"):
-    if not os.path.exists(path):
-        st.error("❌ rating2.xlsx introuvable.")
-        return None, None
-
-    df = pd.read_excel(path)
-    df.columns = [c.strip() for c in df.columns]
-
-    if "Year" not in df:
-        st.error("rating2.xlsx doit contenir Year.")
-        return None, None
-
-    df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
-    df_2024 = df[df["Year"] == 2024]
-
-    if "Code" in df_2024: country_col="Code"
-    elif "Country" in df_2024: country_col="Country"
-    else:
-        st.error("Aucune colonne Code / Country.")
-        return None, None
-
-    pivot = df_2024.pivot_table(
-        index=country_col, columns="Agency", values="Rating", aggfunc="first"
-    ).sort_index()
-
-    return pivot, country_col
-
-
-# --------------------------------------------------------------------
-# ⭐ Chargement ratings internes du modèle
-# --------------------------------------------------------------------
-
-@st.cache_data
-def load_internal_ratings(pattern="internal_ratings_*.xlsx"):
-    files = glob.glob(pattern)
-    if not files:
-        return None
-    files.sort()
-    df = pd.read_excel(files[-1])
-    df.columns = [c.strip() for c in df.columns]
-    return df
-
-
 # --------------------------------------------------------------------
 # 📄 Contenu des pages
 # --------------------------------------------------------------------
-
 def _render_page_content(page: str):
 
     st.markdown("# 💹  Calculateur de Note")
@@ -217,7 +74,11 @@ def _render_page_content(page: str):
     # ------------------------------------------------------
     if page == "Présentation":
         st.markdown("### Explication du projet")
-        st.write("Nous avons construit un modèle de notation souveraine basé sur des données API...")
+        st.write(
+            "Nous avons construit un modèle de notation souveraine basé sur des données "
+            "macroéconomiques récupérées via API. Aucune donnée ne provient d’un fichier "
+            "Excel figé : l’outil est donc réutilisable dans le temps."
+        )
         st.markdown("[Voir documentation du modèle](https://ton-lien-ici.com)")
 
     # ------------------------------------------------------
@@ -227,8 +88,8 @@ def _render_page_content(page: str):
 
         st.markdown("### Simulation de la note")
         st.write(
-            "Vous trouverez ci-dessous les notations souveraines 2024 des trois principales agences "
-            "ainsi que la note calculée par notre modèle interne."
+            "Vous trouverez ci-dessous les notations souveraines 2024 des trois principales "
+            "agences ainsi que la note calculée par notre modèle interne."
         )
 
         ratings_2024, country_col = load_ratings_2024()
@@ -242,7 +103,12 @@ def _render_page_content(page: str):
 
         methodology = st.selectbox(
             "Méthodologie",
-            ["Échelle S&P (AAA–D)", "Échelle Moody's (Aaa–C)", "Échelle Fitch (AAA–D)", "Échelle interne"]
+            [
+                "Échelle S&P (AAA–D)",
+                "Échelle Moody's (Aaa–C)",
+                "Échelle Fitch (AAA–D)",
+                "Échelle interne",
+            ],
         )
 
         pays = st.selectbox("Pays", ratings_2024.index.tolist())
@@ -251,7 +117,7 @@ def _render_page_content(page: str):
             "Échelle S&P (AAA–D)": "S&P",
             "Échelle Moody's (Aaa–C)": "Moody's",
             "Échelle Fitch (AAA–D)": "Fitch",
-            "Échelle interne": None
+            "Échelle interne": None,
         }
 
         agence = methodology_to_agency[methodology]
@@ -265,7 +131,7 @@ def _render_page_content(page: str):
                 st.markdown(
                     f"💡 <b>Note {agence} 2024 pour {pays} :</b> "
                     f"<span style='font-size:22px;font-weight:bold'>{letter} ({score})</span>",
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
             else:
                 st.warning(f"Colonne {agence} manquante dans rating2.xlsx.")
@@ -286,18 +152,22 @@ def _render_page_content(page: str):
                     st.markdown(
                         f"💡 <b>Note interne 2024 pour {pays} :</b> "
                         f"<span style='font-size:24px;font-weight:bold'>{letter} ({cat})</span>",
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
 
                     st.caption(
-                        f"Score continu estimé : {expected:.2f} • Catégorie : {cat} • Équivalent lettre : {letter}"
+                        f"Score continu estimé : {expected:.2f} • "
+                        f"Catégorie : {cat} • Équivalent lettre : {letter}"
                     )
 
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # ------------------------------------------------------
     # MACRO
     # ------------------------------------------------------
     elif page == "Macroéconomie":
+        st.markdown("## Données macroéconomiques")
+        st.write("Visualisation des indicateurs macro pour chaque pays.")
         render_macro_page()
 
     # ------------------------------------------------------
@@ -311,17 +181,25 @@ def _render_page_content(page: str):
 # --------------------------------------------------------------------
 # 🚀 Lancement dashboard
 # --------------------------------------------------------------------
-
 def launch_dashboard():
+    # CSS global
     st.markdown(DARK_CSS, unsafe_allow_html=True)
 
+    # Navigation
     page = _render_sidebar()
 
+    # Initialisation des profils si nécessaire
     if "profiles" not in st.session_state:
-        st.session_state.profiles = _build_from_config(ANALYSTS_CONFIG)
+        st.session_state.profiles = build_from_config(ANALYSTS_CONFIG)
 
-    left, right = st.columns([5,2])
+    # Layout 2 colonnes : contenu à gauche, profils à droite
+    left, right = st.columns([5, 2])
     with left:
         _render_page_content(page)
     with right:
-        _render_profiles_panel()
+        render_profiles_panel()
+
+
+# Optionnel : permettre le run direct par `streamlit run ui_streamlit.py`
+if __name__ == "__main__":
+    launch_dashboard()
