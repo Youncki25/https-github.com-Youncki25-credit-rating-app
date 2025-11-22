@@ -107,43 +107,139 @@ def _render_profiles_panel():
     if st.button("🔄 Reset depuis script.py"):
         st.session_state.profiles = _build_from_config(ANALYSTS_CONFIG)
         st.experimental_rerun()
+# Matthew dans page === Présentation
 
+# ==============================
+#  FONCTION : chargement rating2
+# ==============================
+@st.cache_data
+def load_ratings_2024(path: str = "rating2.xlsx"):
+    """
+    Lit le fichier rating2.xlsx et renvoie :
+    - un pivot (index = pays, colonnes = agences, valeurs = rating en 2024)
+    - le nom de la colonne pays utilisée ("Code" ou "Country")
+    ATTEND dans rating2.xlsx au moins les colonnes :
+        Year, Agency, Rating, Code (ou Country)
+    """
+    df = pd.read_excel(path)
+    df.columns = [c.strip() for c in df.columns]
+
+    # Vérif colonne Year
+    if "Year" not in df.columns:
+        st.error("La colonne 'Year' est manquante dans rating2.xlsx")
+        return None, None
+
+    df["Year"] = pd.to_numeric(df["Year"], errors="coerce")
+    df_2024 = df[df["Year"] == 2024].copy()
+
+    # Détection de la colonne pays
+    if "Code" in df_2024.columns:
+        country_col = "Code"
+    elif "Country" in df_2024.columns:
+        country_col = "Country"
+    else:
+        st.error("Aucune colonne 'Code' ou 'Country' trouvée dans rating2.xlsx")
+        return None, None
+
+    # Vérif colonnes agence / rating
+    needed = {"Agency", "Rating"}
+    if not needed.issubset(df_2024.columns):
+        st.error("rating2.xlsx doit contenir les colonnes 'Agency' et 'Rating'")
+        return None, None
+
+    # Pivot : un pays = une ligne, chaque agence = une colonne
+    ratings_pivot = df_2024.pivot_table(
+        index=country_col,
+        columns="Agency",
+        values="Rating",
+        aggfunc="first"
+    ).sort_index()
+
+    return ratings_pivot, country_col
+
+
+# ==============================
+#  CONTENU DES PAGES
+# ==============================
 def _render_page_content(page: str):
     st.markdown("# 💹  Calculateur de Note")
-    st.caption("Vous pouvez déterminer la note de crédit d'un émetteur souverain en utilisant notre modèle de notation transparent." \
-    " Cette application vous permet d'explorer les données macroéconomique des pays et d'avoir un point de vue des analystes.")
+    st.caption(
+        "Vous pouvez déterminer la note de crédit d'un émetteur souverain en utilisant notre modèle de notation transparent."
+        " Cette application vous permet d'explorer les données macroéconomiques des pays et d'avoir un point de vue des analystes."
+    )
     st.markdown("---")
 
     if page == "Présentation":
-        st.markdown("### Explication du porjet et de l'outil mise à disposition :")
+        st.markdown("### Explication du projet et de l'outil mis à disposition :")
         st.write(
-            "Bonjour,"\
-            "Nous sommes ravis de vous compter parmi nos destinataires. Nous sommes des étudiants et, dans le cadre d’un projet visant à élaborer un modèle de notation d’une entité souveraine, nous avons développé ce calculateur. Les données utilisées sont récupérées via des API : aucune donnée ne provient d’un fichier Excel téléchargé à une date précise. Cela a complexifié notre approche, mais rend l’outil plus régulièrement utilisable."
+            "Bonjour, "
+            "Nous sommes ravis de vous compter parmi nos destinataires. Nous sommes des étudiants et, dans le cadre d’un projet visant à élaborer un modèle de notation d’une entité souveraine, nous avons développé ce calculateur. Les données utilisées sont récupérées via des API : aucune donnée ne provient d’un fichier Excel téléchargé à une date précise. Cela a complexifié notre approche, mais rend l’outil plus régulièrement utilisable. "
             "Dans la section « Modèle », vous trouverez un document détaillant notre approche économétrique ainsi que les limites d’utilisation de notre outil de rating. Vous trouverez également nos coordonnées : nous sommes ouverts à tout retour ou commentaire."
-            )
-        st.write("Nous avons poussé l’analyse un peu plus loin en développant un outil supplémentaire particulièrement intéressant : le calcul de lignes de risque (VaR pour des produits dérivés). Cet outil, couramment utilisé en salle de marché pour mesurer et suivre les expositions, nous a permis d’explorer plus en profondeur les méthodes de gestion du risque. Il était pour nous très instructif de plonger dans ce type d’approche et d’en proposer une mise en pratique concrète au sein de notre projet.")
+        )
+        st.write(
+            "Nous avons poussé l’analyse un peu plus loin en développant un outil supplémentaire particulièrement intéressant : le calcul de lignes de risque (VaR pour des produits dérivés). Cet outil, couramment utilisé en salle de marché pour mesurer et suivre les expositions, nous a permis d’explorer plus en profondeur les méthodes de gestion du risque. Il était pour nous très instructif de plonger dans ce type d’approche et d’en proposer une mise en pratique concrète au sein de notre projet."
+        )
         st.markdown("[📄 Voir le modèle de rating](https://ton-lien-ici.com)")
 
     elif page == "Simulation de la note":
         st.markdown("### Simulation de la note")
+
+        # --- chargement des ratings 2024 ---
+        ratings_2024, country_col = load_ratings_2024()
+
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        issuer = st.text_input("Nom de l'émetteur")
+        issuer = st.text_input("Nom de l'émetteur (affichage uniquement)")
+
         methodology = st.selectbox(
             "Méthodologie",
             ["Échelle S&P (AAA–D)", "Échelle Moody's (Aaa–C)", "Échelle Fitch (AAA–D)", "Échelle interne"],
         )
 
+        # Si le fichier rating2 a bien été chargé
+        if ratings_2024 is not None:
+            # Choix du pays sur base du fichier Excel
+            pays = st.selectbox(
+                "Pays (code ISO / nom dans rating2)",
+                options=ratings_2024.index.tolist()
+            )
+
+            # Mapping nom de méthodo -> colonne d'agence dans rating2
+            methodology_to_agency = {
+                "Échelle S&P (AAA–D)": "S&P",       # adapter au nom exact dans rating2.xlsx
+                "Échelle Moody's (Aaa–C)": "Moody's",
+                "Échelle Fitch (AAA–D)": "Fitch",
+                "Échelle interne": None,
+            }
+
+            agence = methodology_to_agency[methodology]
+
+            if agence is not None:
+                if agence in ratings_2024.columns:
+                    note_2024 = ratings_2024.loc[pays, agence]
+                    st.markdown(
+                        f"💡 **Note {agence} 2024 pour {pays} :** "
+                        f"<span style='font-size:22px; font-weight:bold;'>{note_2024}</span>",
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.warning(
+                        f"La colonne agence '{agence}' n'existe pas dans rating2.xlsx. "
+                        "Vérifie le nom exact de la colonne (S&P, SP, etc.)."
+                    )
+            else:
+                st.info("Aucune note d’agence associée pour l’échelle interne pour le moment.")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
     elif page == "Macroéconomie":
+        # Ta fonction existante
         render_macro_page()
-
-
 
     elif page == "Contact":
         st.markdown("### Contact")
         st.write("Ajoute ici des liens, emails ou formulaires de contact (Streamlit forms).")
-        st.markdown("- Email : contact@tonagence.com\n- Téléphone : +33 1 23 45 67 89")
 
-# --------- Point d’entrée UI ----------
+
 def launch_dashboard():
     # Injecte le CSS
     st.markdown(DARK_CSS, unsafe_allow_html=True)

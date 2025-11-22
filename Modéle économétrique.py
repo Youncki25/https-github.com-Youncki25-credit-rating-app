@@ -391,3 +391,9 @@ if __name__ == "__main__":
             if mask_arg.any():
                 print("\n--- Zoom ARG ---")
                 print(df_last.loc[mask_arg, cols_show])
+
+
+print(df_last[df_last["error_expected_vs_mean"].abs() > 0.5][[
+    "Code", "rating_mean_num", "expected_score", "error_expected_vs_mean"
+]].sort_values("error_expected_vs_mean"))
+print(df_complete["score_mean_cat"].value_counts().sort_index())
