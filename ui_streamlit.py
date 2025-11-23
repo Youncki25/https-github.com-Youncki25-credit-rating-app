@@ -17,11 +17,12 @@ from ratings_utils import (
     rating_to_ordinal,
     load_ratings_2024,
     load_internal_ratings,
-    internal_score_to_rating,      # pour les notes internes
-    INTERNAL_RATING_MAP_INV,       # map lettre → score interne
-    external_rating_to_internal_score,  # convertit agence → score interne
+    internal_score_to_rating,
+    INTERNAL_RATING_MAP_INV,
+    external_rating_to_internal_score,
 )
-from analysts_ui import Analyst, build_from_config, render_profiles_panel
+
+from analysts_ui import build_from_config, render_profiles_panel
 
 try:
     from script import ANALYSTS_CONFIG  # [{name, role, photo}, ...]
