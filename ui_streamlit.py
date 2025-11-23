@@ -4,11 +4,11 @@ from typing import Optional, List, Dict
 
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt  # si tu en as besoin plus tard
+import matplotlib.pyplot as plt  # si besoin pour d'autres graphes plus tard
 
 from macro_graphs import render_macro_page
 
-# Import depuis tes nouveaux modules
+# Import depuis les modules utilitaires
 from ratings_utils import (
     RATING_ORDER,
     RATING_TO_SCORE,
@@ -17,6 +17,9 @@ from ratings_utils import (
     rating_to_ordinal,
     load_ratings_2024,
     load_internal_ratings,
+    internal_score_to_rating,      # pour les notes internes
+    INTERNAL_RATING_MAP_INV,       # map lettre → score interne
+    external_rating_to_internal_score,  # convertit agence → score interne
 )
 from analysts_ui import Analyst, build_from_config, render_profiles_panel
 
@@ -54,7 +57,7 @@ def _render_sidebar() -> str:
     page = st.sidebar.radio(
         "Navigation",
         ["Présentation", "Simulation de la note", "Macroéconomie", "Contact"],
-        index=0,
+        index=1,
     )
     st.sidebar.markdown("---")
     return page
@@ -79,7 +82,8 @@ def _render_page_content(page: str):
             "macroéconomiques récupérées via API. Aucune donnée ne provient d’un fichier "
             "Excel figé : l’outil est donc réutilisable dans le temps."
         )
-        st.markdown("[Voir documentation du modèle](https://ton-lien-ici.com)")
+        # Tu pourras mettre un lien de doc plus tard si tu veux
+        # st.markdown("[Voir documentation du modèle](https://ton-lien-ici.com)")
 
     # ------------------------------------------------------
     # 📌 SIMULATION DE LA NOTE
@@ -92,11 +96,12 @@ def _render_page_content(page: str):
             "agences ainsi que la note calculée par notre modèle interne."
         )
 
+        # Chargement des données
         ratings_2024, country_col = load_ratings_2024()
         internal_ratings = load_internal_ratings()
 
         if ratings_2024 is None:
-            st.warning("Aucune notation agence disponible.")
+            st.warning("Aucune notation agence disponible (rating2.xlsx manquant ou invalide).")
             return
 
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -111,7 +116,28 @@ def _render_page_content(page: str):
             ],
         )
 
-        pays = st.selectbox("Pays", ratings_2024.index.tolist())
+        # -----------------------------
+        # 🔎 Liste des pays dans la selectbox
+        #    → uniquement ceux qui ont une NOTE INTERNE
+        # -----------------------------
+        if internal_ratings is not None and "Code" in internal_ratings.columns:
+            # Codes présents dans le fichier interne
+            codes_internes = set(internal_ratings["Code"].dropna().unique())
+            # Index de ratings_2024 (Code ou Country selon rating2.xlsx)
+            index_ratings = set(ratings_2024.index.tolist())
+            # Intersection
+            pays_dispos = sorted(index_ratings.intersection(codes_internes))
+
+            if not pays_dispos:
+                # Sécurité : si aucune intersection, on repasse à tous les pays
+                pays_options = ratings_2024.index.tolist()
+            else:
+                pays_options = pays_dispos
+        else:
+            # Pas de fichier interne → tous les pays de rating2.xlsx
+            pays_options = ratings_2024.index.tolist()
+
+        pays = st.selectbox("Pays", pays_options)
 
         methodology_to_agency = {
             "Échelle S&P (AAA–D)": "S&P",
@@ -126,39 +152,57 @@ def _render_page_content(page: str):
         if agence:
             if agence in ratings_2024.columns:
                 letter = ratings_2024.loc[pays, agence]
-                score = rating_to_ordinal(letter)
+
+                # ⚠️ Ici on utilise l’ÉCHELLE INTERNE :
+                # ex : Aa2 (Moody's) → AA → 19
+                internal_score = external_rating_to_internal_score(letter, agence)
+
+                if internal_score is None:
+                    score_str = "N/A"
+                else:
+                    score_str = str(internal_score)
 
                 st.markdown(
                     f"💡 <b>Note {agence} 2024 pour {pays} :</b> "
-                    f"<span style='font-size:22px;font-weight:bold'>{letter} ({score})</span>",
+                    f"<span style='font-size:22px;font-weight:bold'>{letter} ({score_str})</span>",
                     unsafe_allow_html=True,
                 )
             else:
                 st.warning(f"Colonne {agence} manquante dans rating2.xlsx.")
 
-        # ---- ÉCHELLE INTERNE ----
+        # ---- ÉCHELLE INTERNE (modèle) ----
         else:
             if internal_ratings is None:
-                st.warning("Aucune note interne trouvée.")
+                st.warning(
+                    "Les notes internes ne sont pas encore disponibles "
+                    "(fichier internal_ratings_*.xlsx manquant)."
+                )
             else:
-                row = internal_ratings[internal_ratings["Code"] == pays]
-                if row.empty:
-                    st.warning(f"Aucune note interne disponible pour {pays}.")
+                if "Code" not in internal_ratings.columns:
+                    st.error("Le fichier internal_ratings_*.xlsx doit contenir une colonne 'Code'.")
+                elif "predicted_cat" not in internal_ratings.columns:
+                    st.error("Le fichier internal_ratings_*.xlsx doit contenir une colonne 'predicted_cat'.")
+                elif "expected_score" not in internal_ratings.columns:
+                    st.error("Le fichier internal_ratings_*.xlsx doit contenir une colonne 'expected_score'.")
                 else:
-                    cat = int(row["predicted_cat"].iloc[0])
-                    expected = float(row["expected_score"].iloc[0])
-                    letter = score_to_rating(cat)
+                    row = internal_ratings[internal_ratings["Code"] == pays]
+                    if row.empty:
+                        st.warning(f"Aucune note interne disponible pour {pays}.")
+                    else:
+                        cat = int(row["predicted_cat"].iloc[0])
+                        expected = float(row["expected_score"].iloc[0])
+                        letter = internal_score_to_rating(cat)
 
-                    st.markdown(
-                        f"💡 <b>Note interne 2024 pour {pays} :</b> "
-                        f"<span style='font-size:24px;font-weight:bold'>{letter} ({cat})</span>",
-                        unsafe_allow_html=True,
-                    )
+                        st.markdown(
+                            f"💡 <b>Note interne 2024 pour {pays} :</b> "
+                            f"<span style='font-size:24px;font-weight:bold'>{letter} ({cat})</span>",
+                            unsafe_allow_html=True,
+                        )
 
-                    st.caption(
-                        f"Score continu estimé : {expected:.2f} • "
-                        f"Catégorie : {cat} • Équivalent lettre : {letter}"
-                    )
+                        st.caption(
+                            f"Score continu estimé : {expected:.2f} • "
+                            f"Catégorie interne : {cat} • Équivalent lettre : {letter}"
+                        )
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -200,6 +244,6 @@ def launch_dashboard():
         render_profiles_panel()
 
 
-# Optionnel : permettre le run direct par `streamlit run ui_streamlit.py`
+# Permet le run direct : streamlit run ui_streamlit.py
 if __name__ == "__main__":
     launch_dashboard()
