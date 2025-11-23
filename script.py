@@ -11,7 +11,7 @@ import base64, os, uuid
 # ─────────────────────────────────────────────────────────
 ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
-        "name": "BELDJENNA",
+        "name": " Younes Beldjenna",
         "role": "Senior Credit Analyst — US Market",
         "photo": "Photo/Younes Beldjenna Analyste Senior .PNG",
     },
@@ -21,17 +21,17 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
         "photo": "Photo/matthew Er .jpg",
     },
     {
-        "name": "Inès",
+        "name": "Inès Bouchafaa",
         "role": "Senior Credit Analyst - EMEA Market",
         "photo": "Photo/Ines.jpg",
     },
     {
-        "name": "Marie-Gloriseuse Dupont",
+        "name": "Marie-Gloriseuse Ndjoli bofambi",
         "role": "Senior Credit Analyst - LATAM Market",
         "photo": "Photo/marie.png",
     },
     {
-        "name": "Sébastien Lecornue",
+        "name": "Sébastien Lecornu",
         "role": "FX & Macro Analyst",
         "photo": "Photo/sebastien.jpeg",
     },
@@ -49,11 +49,6 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
         "name": "François Bayrou",
         "role": "Quant Researcher",
         "photo": "Photo/franois.webp",
-    },
-    {
-        "name": "Aladeen Assad",
-        "role": "Compliance Officer",
-        "photo": "Photo/alaaden.jpeg"  ,
     },
     {
         "name": "Michel Barnier",
