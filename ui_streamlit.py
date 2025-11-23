@@ -76,7 +76,7 @@ def _render_sidebar() -> str:
     st.sidebar.markdown("### Menu")
     page = st.sidebar.radio(
         "Navigation",
-        ["Présentation", "Simulation de la note", "Macroéconomie", "Contact"],
+        ["Présentation", "Simulation de la note", "Macroéconomie","Point économique" "Contact"],
         index=1,
     )
     st.sidebar.markdown("---")
@@ -259,7 +259,9 @@ def _render_page_content(page: str):
         st.markdown("## Données macroéconomiques")
         st.write("Visualisation des indicateurs macro pour chaque pays.")
         render_macro_page()
-
+    elif page=="Point économique ":
+        st.markdown("Vous trouverez le point économique de la semaine du 24-11 au 31-11 : ")
+        st.write("")
     # ------------------------------------------------------
     # CONTACT
     # ------------------------------------------------------
