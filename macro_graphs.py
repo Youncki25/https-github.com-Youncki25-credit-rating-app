@@ -1,128 +1,96 @@
-import glob, os
+import os
 import pandas as pd
 import streamlit as st
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_GLOB = os.path.join(BASE_DIR, "*_WB_timeseries.xlsx")
+from ratings_utils import load_internal_ratings
+
+# =======================================================================================
+#  🔥 1) CHARGE LE DATASET UTILISÉ PAR LE MODÈLE (déjà interpolé & propre)
+# =======================================================================================
 
 @st.cache_data(show_spinner=False)
-def _load_country_timeseries(file_list: tuple[str, ...]) -> dict[str, pd.DataFrame]:
-    out = {}
-    for fp in file_list:
-        iso = os.path.basename(fp).split("_")[0]
+def load_model_dataset(base_dir: str) -> pd.DataFrame:
+    path = os.path.join(base_dir, "model_dataset.xlsx")
+    if not os.path.exists(path):
+        st.error(f"❌ Fichier introuvable : {path}. Lance ton script pour le générer.")
+        return pd.DataFrame()
 
-        try:
-            df = pd.read_excel(fp)
-        except Exception:
-            df = pd.read_excel(fp, index_col=0)
+    df = pd.read_excel(path)
+    df = df.sort_values(["Code", "Year"])
+    return df
 
-        if "date" in df.columns:
-            df = df.rename(columns={"date": "Date"})
-        elif "Date" not in df.columns:
-            df = df.rename(columns={df.columns[0]: "Date"})
 
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df = df.dropna(subset=["Date"]).sort_values("Date").set_index("Date")
-
-        for c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-
-        num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-        out[iso] = df[num_cols]
-
-    return out
-
+# =======================================================================================
+#  🔥 2) RENDER MACRO PAGE — Basé 100% sur df_model (plus sur les fichiers WB bruts)
+# =======================================================================================
 
 def render_macro_page():
-    st.markdown("### Macroéconomie")
 
-    file_list = tuple(sorted(glob.glob(DATA_GLOB)))
-    db = _load_country_timeseries(file_list)
+    st.markdown("### Données macroéconomiques")
+    st.write("Visualisation des indicateurs macro utilisés dans notre modèle interne.")
 
-    if not db:
-        st.error("Aucun fichier `*_WB_timeseries.xlsx` trouvé.")
-        return
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    df = load_model_dataset(base_dir)
 
-    countries = sorted(db.keys())
-
-    # --------- Choix du pays ----------
-    with st.sidebar:
-        st.markdown("####  Options des graphiques : ")
-        sel_country = st.selectbox("Pays", countries, index=0)
-
-    df = db[sel_country].copy()
     if df.empty:
-        st.info(f"Pas de données pour {sel_country}.")
         return
 
-    if not isinstance(df.index, pd.DatetimeIndex):
-        st.error(f"Index de dates invalide pour {sel_country}.")
+    # Colonnes macro du modèle
+    macro_cols = [
+        "GDP growth (annual %)",
+        "GDP per capita (current US$)",
+        "Debt (% of GDP)",
+        "Deficit (% of GDP)",
+        "Inflation, consumer prices (annual %)",
+        "Current account balance (% of GDP)",
+        "Control of Corruption",
+        "Interest payments (% of GDP)"
+    ]
+
+    # ===================================================================================
+    # 1) Filtrer uniquement les pays présents dans les ratings internes
+    # ===================================================================================
+    internal_ratings = load_internal_ratings()
+    if internal_ratings is None:
+        st.error("❌ Aucun rating interne trouvé (internal_ratings_*.xlsx manquant).")
         return
 
-    df = df.sort_index()
+    internal_codes = set(internal_ratings["Code"].unique())
+    df = df[df["Code"].isin(internal_codes)]
 
-    # --------- Années disponibles ----------
-    years = df.index.year
-    years = years[~pd.isna(years)]
-    if years.empty:
-        st.info(f"Aucune année valide pour {sel_country}.")
-        return
+    # ===================================================================================
+    # 2) Filtrer uniquement les années 2000–2024
+    # ===================================================================================
+    df = df[(df["Year"] >= 2000) & (df["Year"] <= 2024)]
 
-    # Fenêtre cible
-    TARGET_MIN, TARGET_MAX = 2000, 2024
+    codes = sorted(df["Code"].unique())
 
-    # Années dispo dans la fenêtre 2000–2024
-    years_2000_2024 = years[(years >= TARGET_MIN) & (years <= TARGET_MAX)]
-
-    if not years_2000_2024.empty:
-        y_min = int(years_2000_2024.min())
-        y_max = int(years_2000_2024.max())
-    else:
-        # si aucun point entre 2000 et 2024, on affiche toute la série
-        y_min = int(years.min())
-        y_max = int(years.max())
-        st.caption(
-            f"Aucune donnée entre 2000 et 2024 pour {sel_country}. "
-            f"Affichage de la série complète ({y_min}–{y_max})."
-        )
-
-    # --------- Slider sur les années ----------
+    # === Selecteur de pays ===
     with st.sidebar:
-        if y_min == y_max:
-            st.caption(f"Période disponible : {y_min} uniquement.")
-            start_year = end_year = y_min
-        else:
-            start_year, end_year = st.slider(
-                "Période (année)",
-                min_value=y_min,
-                max_value=y_max,
-                value=(max(y_min, TARGET_MIN), min(y_max, TARGET_MAX)),
-                step=1,
-            )
+        st.markdown("#### Options des graphiques")
+        sel_code = st.selectbox("Pays", codes)
 
-        rolling = st.number_input("Moyenne mobile (années)", 1, 10, 1, 1)
-        normalize = st.checkbox("Indexer à 100 au début de la période", value=False)
         show_table = st.checkbox("Afficher le tableau sous les graphes", value=False)
 
-    # --------- Filtrage & transformations ----------
-    mask = (df.index.year >= start_year) & (df.index.year <= end_year)
-    df = df.loc[mask]
 
-    if rolling and rolling > 1:
-        df = df.sort_index().rolling(rolling).mean()
+    df_country = df[df["Code"] == sel_code].copy()
+    df_country = df_country.set_index("Year")
 
-    if normalize and not df.dropna().empty:
-        first = df.dropna().iloc[0]
-        df = (df / first) * 100
+    st.markdown(f"### {sel_code} — indicateurs macro (2000–2024)")
 
-    st.markdown(f"#### {sel_country} — indicateurs")
-    if df.empty or not len(df.columns):
-        st.info("Pas de données sur cette période.")
-        return
+    # ===================================================================================
+    # 3) Affichage des graphes pour chaque indicateur du modèle
+    # ===================================================================================
+    for col in macro_cols:
 
-    for col in df.columns:
+        if col not in df_country.columns:
+            continue
+
         st.markdown(f"**{col}**")
-        st.line_chart(df[[col]].rename(columns={col: sel_country}), height=300)
+        st.line_chart(
+            df_country[[col]].rename(columns={col: sel_code}),
+            height=300
+        )
 
         if show_table:
-            st.dataframe(df[[col]].rename(columns={col: sel_country}).round(3))
+            st.dataframe(df_country[[col]].round(3))

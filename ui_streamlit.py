@@ -1,4 +1,4 @@
-# ui_streamlit.py
+#  streamlit run ui_streamlit.py
 import os
 from typing import Optional, List, Dict
 
@@ -43,11 +43,30 @@ DARK_CSS = """
 .stApp { background: var(--bg); color: var(--text); font-family: ui-monospace; }
 h1, h2, h3, h4 { color: var(--text); }
 hr { border: none; border-top: 1px solid var(--line); margin: 0.75rem 0; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem; }
-.face { width:72px; height:72px; border-radius: 50%; object-fit: cover; border: 1px solid #374151; }
+
+.card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.9rem;
+}
+
+/* === 🔥 Photos carrées & plus grandes === */
+.face {
+    width: 100px !important;
+    height: 100px !important;
+    object-fit: cover;
+    border-radius: 12px;      /* carré arrondi léger */
+    display: block;
+    margin-left: auto;
+    margin-right: auto;       /* centre l’image */
+    border: 2px solid #374151;
+}
+
 .small { font-size: 12px; color: var(--muted); }
 </style>
 """
+
 
 
 # --------------------------------------------------------------------
@@ -69,20 +88,46 @@ def _render_sidebar() -> str:
 # --------------------------------------------------------------------
 def _render_page_content(page: str):
 
-    st.markdown("# 💹  Calculateur de Note")
-    st.caption("Déterminez la note de crédit souveraine selon agences & modèle interne.")
+    st.markdown("# 💹  AGENCE DE NOTATION MYMY'S")
+    st.caption("Créer par Younes Beldjenna, Matthew Er, Ines Bouchafaa, Marie-Glorieuse....")
     st.markdown("---")
 
     # ------------------------------------------------------
     # Présentation
     # ------------------------------------------------------
     if page == "Présentation":
-        st.markdown("### Explication du projet")
+        st.markdown("### 👋 Bienvenue dans notre dashboard de notation souveraine")
+
         st.write(
-            "Nous avons construit un modèle de notation souveraine basé sur des données "
-            "macroéconomiques récupérées via API. Aucune donnée ne provient d’un fichier "
-            "Excel figé : l’outil est donc réutilisable dans le temps."
-        )
+            "Ce projet présente un modèle de notation souveraine que nous avons développé dans le cadre de notre Master 2. "
+            "Le modèle s’appuie exclusivement sur des données macroéconomiques récupérées via API, notamment auprès du FMI "
+            "et de la Banque Mondiale. Aucune donnée n’est issue de fichiers Excel statiques, ce qui rend l’outil "
+            "entièrement réutilisable, actualisable et transparent dans le temps.\n\n"
+            
+            "Les notations des agences externes proviennent quant à elles de l’API Global Economics. Dans la section "
+            "**Simulation de la note**, vous pourrez comparer les notes calculées par notre modèle interne avec celles "
+            "publiées par les trois principales agences internationales.\n\n"
+
+            "Nous avons estimé notre modèle sur un échantillon de **10 pays**, avant de l’appliquer à un nombre plus large "
+            "de pays afin d’évaluer sa capacité prédictive. Certaines limites apparaissent cependant, notamment liées "
+            "aux contraintes de stockage de la plateforme Streamlit : un nombre plus élevé de pays implique davantage "
+            "de fichiers macroéconomiques, ce qui dépasse rapidement les quotas disponibles.\n\n"
+
+            "Malgré ces contraintes, l’outil permet de proposer une démonstration complète, interactive et pédagogique de "
+            "notre modèle de notation souveraine.\n\n"
+
+            "Dans l’onglet **Macroéconomie**, vous trouverez également des visualisations des principaux indicateurs "
+            "macroéconomiques pour les pays analysés. Les données proviennent de la World Bank, ce qui implique un certain "
+            "décalage temporel par rapport à des bases de données premium comme Bloomberg.\n\n"
+
+            "Nous publions aussi un **point macroéconomique hebdomadaire**, réalisé par nos équipes, afin d’offrir un suivi "
+            "régulier de l’actualité économique internationale.\n\n"
+
+            "Enfin, dans l’onglet **Modèle**, vous pourrez consulter notre document méthodologique détaillant notre démarche "
+            "et la construction du modèle interne. L’onglet **Contact** vous permet de joindre directement nos équipes pour "
+            "toute question ou demande d’information."
+)
+        
         # Tu pourras mettre un lien de doc plus tard si tu veux
         # st.markdown("[Voir documentation du modèle](https://ton-lien-ici.com)")
 
