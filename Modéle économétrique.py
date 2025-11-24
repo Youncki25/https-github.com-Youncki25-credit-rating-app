@@ -3,6 +3,7 @@ import glob
 import numpy as np
 import pandas as pd
 from statsmodels.miscmodels.ordinal_model import OrderedModel
+import matplotlib.pyplot as plt  # pour le graphique
 
 # =======================================================================================
 # 0) LISTE DES INDICATEURS WB
@@ -20,6 +21,9 @@ WB_INDICATORS_CANON = [
     "Control of Corruption",
     "Political Stability and Absence of Violence",
 ]
+
+# (facultatif) pour debug ciblé
+TARGET_CODES_DEBUG = ["JPN", "VNM"]
 
 # =======================================================================================
 # 1) STANDARDISATION DES FICHIERS WB
@@ -100,6 +104,17 @@ def load_wb_panel(base_dir: str) -> pd.DataFrame:
 
     wb_panel = pd.concat(all_list, ignore_index=True)
     print(f"✔️ WB Panel construit. Shape : {wb_panel.shape}\n")
+
+    # DEBUG JPN / VNM
+    print("---- DEBUG WB_PANEL (JPN, VNM) ----")
+    for c in TARGET_CODES_DEBUG:
+        sub = wb_panel[wb_panel["Code"] == c]
+        if sub.empty:
+            print(f"{c} : ABSENT du wb_panel")
+        else:
+            print(f"{c} : années WB min={sub['Year'].min()}, max={sub['Year'].max()}, n={len(sub)}")
+    print("-----------------------------------\n")
+
     return wb_panel
 
 # =======================================================================================
@@ -154,6 +169,17 @@ def load_ratings(base_dir: str, wb_panel: pd.DataFrame) -> pd.DataFrame:
     df_filled = df_year.groupby("Code", group_keys=False).apply(_fill_nearest)
 
     print(f"✔️ Ratings complétés. Shape : {df_filled.shape}\n")
+
+    # DEBUG JPN / VNM
+    print("---- DEBUG RATINGS (JPN, VNM) ----")
+    for c in TARGET_CODES_DEBUG:
+        sub = df_filled[df_filled["Code"] == c]
+        if sub.empty:
+            print(f"{c} : ABSENT des ratings complétés")
+        else:
+            print(f"{c} : années rating min={sub['Year'].min()}, max={sub['Year'].max()}, n={len(sub)}")
+    print("----------------------------------\n")
+
     return df_filled[["Country", "Code", "Year", "rating_mean_num"]]
 
 # =======================================================================================
@@ -189,7 +215,7 @@ def load_defaults(base_dir: str) -> pd.DataFrame:
     return df_long
 
 # =======================================================================================
-# 5) BUILD MODEL DATASET — AVEC AR(1)
+# 5) BUILD MODEL DATASET — AVEC AR(1) + IMPUTATION DES NA
 # =======================================================================================
 
 def build_model_dataset(base_dir: str) -> tuple[pd.DataFrame, list]:
@@ -260,11 +286,33 @@ def build_model_dataset(base_dir: str) -> tuple[pd.DataFrame, list]:
         "rating_lag",
     ]
 
-    df_model = df.dropna(subset=X_cols + ["score_mean_cat"]).copy()
+    # ⭐⭐ IMPUTATION DES NA POUR GARDER TOUS LES PAYS (y compris JPN, VNM)
+    for col in X_cols:
+        # Moyenne par pays
+        df[col] = df.groupby("Code")[col].transform(
+            lambda s: s.fillna(s.mean())
+        )
+        # Moyenne globale si encore NaN
+        if df[col].isna().any():
+            global_mean = df[col].mean(skipna=True)
+            df[col] = df[col].fillna(global_mean)
+
+    # Ici on garde les NA éventuels seulement sur score_mean_cat (si rating absent)
+    df_model = df.dropna(subset=["score_mean_cat"]).copy()
 
     out_path = os.path.join(base_dir, "model_dataset.xlsx")
     df_model.to_excel(out_path, index=False)
     print(f"✔️ Dataset final sauvegardé → {out_path}\n")
+
+    # DEBUG JPN / VNM dans df_model
+    print("---- DEBUG DF_MODEL (JPN, VNM) ----")
+    for c in TARGET_CODES_DEBUG:
+        sub = df_model[df_model["Code"] == c]
+        if sub.empty:
+            print(f"{c} : ABSENT de df_model (après imputation)")
+        else:
+            print(f"{c} : années df_model min={sub['Year'].min()}, max={sub['Year'].max()}, n={len(sub)}")
+    print("-----------------------------------\n")
 
     return df_model, X_cols
 
@@ -279,13 +327,13 @@ def estimate_ordered_model(base_dir: str):
     X = df_model[X_cols]
 
     model = OrderedModel(y, X, distr="logit")
-    result = model.fit(method="bfgs", disp=True)
+    result = model.fit(method="bfgs", disp=True, transparams=True)
 
     print(result.summary())
     return result, df_model, X_cols
 
 # =======================================================================================
-# 7) MAIN : ESTIMATION + EXPORT DES NOTES INTERNES
+# 7) MAIN : ESTIMATION + EXPORT + HISTOGRAMME
 # =======================================================================================
 
 if __name__ == "__main__":
@@ -304,11 +352,24 @@ if __name__ == "__main__":
     cols_needed = X_cols + ["score_mean_cat", "rating_mean_num", "Year", "Code"]
     df_complete = df_model.dropna(subset=cols_needed).copy()
 
+    # DEBUG JPN / VNM dans df_complete
+    print("\n---- DEBUG DF_COMPLETE (JPN, VNM) ----")
+    for c in TARGET_CODES_DEBUG:
+        sub = df_complete[df_complete["Code"] == c]
+        if sub.empty:
+            print(f"{c} : ABSENT de df_complete")
+        else:
+            print(f"{c} : années df_complete min={sub['Year'].min()}, max={sub['Year'].max()}, n={len(sub)}")
+    print("--------------------------------------\n")
+
     if df_complete.empty:
         print("\n⚠️ Aucune observation complète pour le test sur la dernière année.")
     else:
         latest_year = int(df_complete["Year"].max())
         df_last = df_complete[df_complete["Year"] == latest_year].copy()
+
+        print(f"Année max dans df_complete : {latest_year}")
+        print("Codes présents dans df_last :", sorted(df_last['Code'].unique()))
 
         if df_last.empty:
             print(f"\n⚠️ Aucune observation pour l'année {latest_year}.")
@@ -368,3 +429,34 @@ if __name__ == "__main__":
             internal_path = os.path.join(base_dir, f"internal_ratings_{latest_year}.xlsx")
             out_internal.to_excel(internal_path, index=False)
             print(f"\n✔️ Notes internes sauvegardées → {internal_path}")
+
+            # 8) HISTOGRAMME DES ÉCARTS POUR LES 10 PAYS D'ANALYSE
+            target_codes = ["FRA", "GBR", "USA", "JPN",
+                            "ZAF", "ARG", "GRC", "VNM", "ECU", "EGY"]
+
+            df_errors = df_last[df_last["Code"].isin(target_codes)].copy()
+
+            if df_errors.empty:
+                print("\n⚠️ Aucun des pays cibles n'est présent dans la dernière année.")
+            else:
+                df_errors["abs_error"] = df_errors["error_expected_vs_mean"].abs()
+
+                # Forcer l’ordre mais ne pas planter si un pays manque encore
+                df_errors["Code"] = pd.Categorical(df_errors["Code"],
+                                                   categories=target_codes,
+                                                   ordered=True)
+                df_errors = df_errors.sort_values("Code")
+
+                plt.figure(figsize=(10, 5))
+                plt.bar(df_errors["Code"], df_errors["abs_error"])
+                plt.xlabel("Pays")
+                plt.ylabel("Erreur absolue (|score prévu - score observé|)")
+                plt.title(f"Écarts de notation pour l'année {latest_year}")
+                plt.grid(axis="y", alpha=0.3)
+
+                hist_path = os.path.join(base_dir, f"errors_hist_{latest_year}.png")
+                plt.tight_layout()
+                plt.savefig(hist_path, dpi=300)
+                plt.close()
+
+                print(f"✔️ Histogramme des écarts sauvegardé → {hist_path}")
