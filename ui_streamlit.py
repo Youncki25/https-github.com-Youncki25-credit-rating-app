@@ -37,30 +37,9 @@ except Exception:
 # ----------------------------------
 # 📂 Chemins relatifs (compatibles local + Streamlit Cloud)
 # ----------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-def _find_existing_file(candidates):
-    """
-    Retourne le premier chemin existant dans la liste,
-    sinon le premier chemin de la liste.
-    """
-    for p in candidates:
-        if os.path.exists(p):
-            return p
-    return candidates[0]
-
-
-PDF_PATH = _find_existing_file([
-    os.path.join(BASE_DIR, "Rating_project-2.pdf"),
-    os.path.join(BASE_DIR, "docs", "Rating_project-2.pdf"),
-])
-
-
-PDF_PATH = _find_existing_file([
-    os.path.join(BASE_DIR, "Rating_project-2.pdf"),
-    os.path.join(BASE_DIR, "docs", "Rating_project-2.pdf"),
-])
+# ----------------------------------
+# 📂 Chemins relatifs (compatibles local + Streamlit Cloud)
+# ----------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -86,6 +65,7 @@ PDF_PATH = _find_existing_file([
     os.path.join(BASE_DIR, "Rating_project-2.pdf"),
     os.path.join(BASE_DIR, "docs", "Rating_project-2.pdf"),
 ])
+
 
 
 DARK_CSS = """
