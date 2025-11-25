@@ -62,10 +62,9 @@ RATING_API_PATH = _find_existing_file([
 
 # ➜ chemin du PDF de méthodo
 PDF_PATH = _find_existing_file([
-    os.path.join(BASE_DIR, "Rating_project-2.pdf"),
-    os.path.join(BASE_DIR, "docs", "Rating_project-2.pdf"),
+    os.path.join(BASE_DIR, "Rating__project-2.pdf"),      # ⬅️ 2 underscores
+    os.path.join(BASE_DIR, "docs", "Rating__project-2.pdf"),
 ])
-
 
 
 DARK_CSS = """
