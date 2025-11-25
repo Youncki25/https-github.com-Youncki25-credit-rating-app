@@ -58,8 +58,8 @@ RATING_API_PATH = _find_existing_file([
 ])
 
 PDF_PATH = _find_existing_file([
-    os.path.join(BASE_DIR, "Rating__project-2.pdf"),
-    os.path.join(BASE_DIR, "docs", "Rating__project-2.pdf"),
+    os.path.join(BASE_DIR, "Rating_project-2.pdf"),
+    os.path.join(BASE_DIR, "docs", "Rating_project-2.pdf"),
 ])
 
 
@@ -133,7 +133,7 @@ def _render_page_content(page: str):
         except FileNotFoundError:
             st.error(
                 "📄 Impossible de trouver le PDF de méthodologie. "
-                "Vérifie que `Rating__project-2.pdf` est bien dans le repo "
+                "Vérifie que `Rating_project-2.pdf` est bien dans le repo "
                 "et au bon endroit (racine ou dossier docs/)."
             )
 
