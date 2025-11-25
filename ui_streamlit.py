@@ -15,7 +15,6 @@ from ratings_utils import (
     MOODYS_TO_SP,
     score_to_rating,
     rating_to_ordinal,
-    load_ratings_2024,
     load_internal_ratings,
     internal_score_to_rating,
     INTERNAL_RATING_MAP_INV,
@@ -68,7 +67,6 @@ hr { border: none; border-top: 1px solid var(--line); margin: 0.75rem 0; }
 """
 
 
-
 # --------------------------------------------------------------------
 # 🧭 Sidebar / Navigation
 # --------------------------------------------------------------------
@@ -76,7 +74,7 @@ def _render_sidebar() -> str:
     st.sidebar.markdown("### Menu")
     page = st.sidebar.radio(
         "Navigation",
-        ["Présentation", "Simulation de la note", "Macroéconomie","Point économique" "Contact"],
+        ["Présentation", "Simulation de la note", "Macroéconomie", "Point économique", "Contact"],
         index=1,
     )
     st.sidebar.markdown("---")
@@ -89,7 +87,7 @@ def _render_sidebar() -> str:
 def _render_page_content(page: str):
 
     st.markdown("# 💹  AGENCE DE NOTATION MYMY'S")
-    st.caption("Créer par Younes Beldjenna, Matthew Er, Ines Bouchafaa, Marie-Glorieuse....")
+    st.caption("Créé par Younes Beldjenna, Matthew Er, Ines Bouchafaa, Marie-Glorieuse....")
     st.markdown("---")
 
     # ------------------------------------------------------
@@ -126,10 +124,7 @@ def _render_page_content(page: str):
             "Enfin, dans l’onglet **Modèle**, vous pourrez consulter notre document méthodologique détaillant notre démarche "
             "et la construction du modèle interne. L’onglet **Contact** vous permet de joindre directement nos équipes pour "
             "toute question ou demande d’information."
-)
-        
-        # Tu pourras mettre un lien de doc plus tard si tu veux
-        # st.markdown("[Voir documentation du modèle](https://ton-lien-ici.com)")
+        )
 
     # ------------------------------------------------------
     # 📌 SIMULATION DE LA NOTE
@@ -142,12 +137,47 @@ def _render_page_content(page: str):
             "agences ainsi que la note calculée par notre modèle interne."
         )
 
-        # Chargement des données
-        ratings_2024, country_col = load_ratings_2024()
+        # 🔹 Chargement + transformation du fichier Rating_API.xlsx (format long → large)
+        try:
+            ratings_raw = pd.read_excel("/Users/beldjenna/Desktop/Rating Algo/Rating_API.xlsx")
+        except Exception as e:
+            st.error(f"Erreur lors du chargement des notations 2024 (Rating_API.xlsx) : {e}")
+            return
+
+        # On garde uniquement l'année 2024
+        if "Year" not in ratings_raw.columns:
+            st.error("Le fichier Rating_API.xlsx doit contenir une colonne 'Year'.")
+            return
+
+        ratings_raw = ratings_raw[ratings_raw["Year"] == 2024].copy()
+
+        # Vérifications minimales
+        for col in ["Code", "Agency", "Rating", "Month"]:
+            if col not in ratings_raw.columns:
+                st.error(f"Le fichier Rating_API.xlsx doit contenir une colonne '{col}'.")
+                return
+
+        # Nettoyage
+        ratings_raw["Code"] = ratings_raw["Code"].astype(str).str.strip()
+        ratings_raw["Agency"] = ratings_raw["Agency"].astype(str).str.strip()
+        ratings_raw["Rating"] = ratings_raw["Rating"].astype(str).str.strip()
+
+        # On prend la dernière note par pays / agence (mois le plus récent)
+        ratings_raw = ratings_raw.sort_values(["Code", "Agency", "Year", "Month"])
+        last_obs = ratings_raw.groupby(["Code", "Agency"], as_index=False).tail(1)
+
+        # Pivot : 1 ligne = 1 pays, 1 colonne par agence (S&P, Moody's, Fitch)
+        ratings_2024 = last_obs.pivot(index="Code", columns="Agency", values="Rating")
+
+        ratings_2024.columns = ratings_2024.columns.astype(str).str.strip()
+        ratings_2024.index = ratings_2024.index.astype(str).str.strip()
+
+        country_col = "Code"
+
         internal_ratings = load_internal_ratings()
 
-        if ratings_2024 is None:
-            st.warning("Aucune notation agence disponible (rating2.xlsx manquant ou invalide).")
+        if ratings_2024 is None or ratings_2024.empty:
+            st.warning("Aucune notation agence disponible dans Rating_API.xlsx pour l'année 2024.")
             return
 
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -167,21 +197,18 @@ def _render_page_content(page: str):
         #    → uniquement ceux qui ont une NOTE INTERNE
         # -----------------------------
         if internal_ratings is not None and "Code" in internal_ratings.columns:
-            # Codes présents dans le fichier interne
-            codes_internes = set(internal_ratings["Code"].dropna().unique())
-            # Index de ratings_2024 (Code ou Country selon rating2.xlsx)
+            codes_internes = set(
+                internal_ratings["Code"].dropna().astype(str).str.strip().unique()
+            )
             index_ratings = set(ratings_2024.index.tolist())
-            # Intersection
             pays_dispos = sorted(index_ratings.intersection(codes_internes))
 
             if not pays_dispos:
-                # Sécurité : si aucune intersection, on repasse à tous les pays
-                pays_options = ratings_2024.index.tolist()
+                pays_options = sorted(ratings_2024.index.tolist())
             else:
                 pays_options = pays_dispos
         else:
-            # Pas de fichier interne → tous les pays de rating2.xlsx
-            pays_options = ratings_2024.index.tolist()
+            pays_options = sorted(ratings_2024.index.tolist())
 
         pays = st.selectbox("Pays", pays_options)
 
@@ -199,22 +226,28 @@ def _render_page_content(page: str):
             if agence in ratings_2024.columns:
                 letter = ratings_2024.loc[pays, agence]
 
-                # ⚠️ Ici on utilise l’ÉCHELLE INTERNE :
-                # ex : Aa2 (Moody's) → AA → 19
-                internal_score = external_rating_to_internal_score(letter, agence)
-
-                if internal_score is None:
-                    score_str = "N/A"
+                if pd.isna(letter):
+                    st.markdown(
+                        f"💡 <b>Note {agence} 2024 pour {pays} :</b> "
+                        f"<span style='font-size:22px;font-weight:bold'>N/A</span>",
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    score_str = str(internal_score)
+                    # Conversion vers l'échelle interne (score numérique)
+                    internal_score = external_rating_to_internal_score(letter, agence)
 
-                st.markdown(
-                    f"💡 <b>Note {agence} 2024 pour {pays} :</b> "
-                    f"<span style='font-size:22px;font-weight:bold'>{letter} ({score_str})</span>",
-                    unsafe_allow_html=True,
-                )
+                    if internal_score is None:
+                        score_str = "N/A"
+                    else:
+                        score_str = str(internal_score)
+
+                    st.markdown(
+                        f"💡 <b>Note {agence} 2024 pour {pays} :</b> "
+                        f"<span style='font-size:22px;font-weight:bold'>{letter} ({score_str})</span>",
+                        unsafe_allow_html=True,
+                    )
             else:
-                st.warning(f"Colonne {agence} manquante dans rating2.xlsx.")
+                st.warning(f"Colonne {agence} manquante dans Rating_API.xlsx.")
 
         # ---- ÉCHELLE INTERNE (modèle) ----
         else:
@@ -231,6 +264,9 @@ def _render_page_content(page: str):
                 elif "expected_score" not in internal_ratings.columns:
                     st.error("Le fichier internal_ratings_*.xlsx doit contenir une colonne 'expected_score'.")
                 else:
+                    internal_ratings["Code"] = (
+                        internal_ratings["Code"].astype(str).str.strip()
+                    )
                     row = internal_ratings[internal_ratings["Code"] == pays]
                     if row.empty:
                         st.warning(f"Aucune note interne disponible pour {pays}.")
@@ -259,9 +295,54 @@ def _render_page_content(page: str):
         st.markdown("## Données macroéconomiques")
         st.write("Visualisation des indicateurs macro pour chaque pays.")
         render_macro_page()
-    elif page=="Point économique ":
-        st.markdown("Vous trouverez le point économique de la semaine du 24-11 au 31-11 : ")
-        st.write("")
+
+    # ------------------------------------------------------
+    # POINT ÉCONOMIQUE
+    # ------------------------------------------------------
+    elif page == "Point économique":
+        st.markdown("## 📅 Agenda économique de la semaine")
+        st.markdown(
+            "Principaux événements macroéconomiques de la semaine, inspirés du "
+            "[calendrier économique d’Investing.com](https://www.investing.com/economic-calendar/)."
+        )
+
+        st.markdown("---")
+
+        # 🔹 Mardi
+        st.markdown("### 📌 Mardi")
+        st.write(
+            "- 🇺🇸 **Confiance des consommateurs (US)** – indicateur clé du moral des ménages "
+            "et de la dynamique de la demande."
+        )
+
+        # 🔹 Mercredi
+        st.markdown("### 📌 Mercredi")
+        st.write("- 🇦🇺 **CPI Australie** – inflation importante pour la RBA.")
+        st.write("- 🇳🇿 **Décision de taux RBNZ**.")
+        st.write("- 🇺🇸 **PIB US (2e estimation)**.")
+        st.write("- 🇺🇸 **PCE core & headline** – inflation préférée de la Fed.")
+
+        # 🔹 Jeudi
+        st.markdown("### 📌 Jeudi")
+        st.write("- 🇺🇸 **Thanksgiving (US)** – marchés américains quasi fermés.")
+        st.write("- 🇯🇵 **Inflation Tokyo** – indicateur avancé.")
+
+        # 🔹 Vendredi
+        st.markdown("### 📌 Vendredi")
+        st.write("- 🇩🇪 **Ventes au détail Allemagne**.")
+        st.write("- 🇨🇭 **PIB Suisse**.")
+        st.write("- 🇩🇪 **Inflation préliminaire Allemagne**.")
+        st.write("- 🇨🇦 **PIB Canada**.")
+
+        # 🔹 Week-end
+        st.markdown("### 📌 Week-end")
+        st.write("- 🇨🇳 **PMI manufacturier & non manufacturier Chine**.")
+
+        st.markdown("---")
+        st.caption(
+            "⚠️ Les dates exactes peuvent varier — toujours vérifier le calendrier Investing en temps réel."
+        )
+
     # ------------------------------------------------------
     # CONTACT
     # ------------------------------------------------------

@@ -3,12 +3,7 @@ import glob
 import numpy as np
 import pandas as pd
 from statsmodels.miscmodels.ordinal_model import OrderedModel
-import matplotlib.pyplot as plt  # pour le graphique
-
-# =======================================================================================
-# 0) LISTE DES INDICATEURS WB
-# =======================================================================================
-
+import matplotlib.pyplot as plt  # pour le graphiquef
 WB_INDICATORS_CANON = [
     "GDP growth (annual %)", 
     "GDP per capita (current US$)",
@@ -182,9 +177,6 @@ def load_ratings(base_dir: str, wb_panel: pd.DataFrame) -> pd.DataFrame:
 
     return df_filled[["Country", "Code", "Year", "rating_mean_num"]]
 
-# =======================================================================================
-# 4) DEFAULTS
-# =======================================================================================
 
 def load_defaults(base_dir: str) -> pd.DataFrame:
     print(" 3) LECTURE DES DÉFAUTS")
