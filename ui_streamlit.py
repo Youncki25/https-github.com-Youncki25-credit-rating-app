@@ -34,6 +34,13 @@ except Exception:
 
 
 # ----------------------------------
+# 📂 Chemin du fichier Rating_API.xlsx (relatif au script)
+# ----------------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RATING_API_PATH = os.path.join(BASE_DIR, "Rating_API.xlsx")
+
+
+# ----------------------------------
 # 🌙 Thème sombre / CSS
 # ----------------------------------
 DARK_CSS = """
@@ -139,7 +146,7 @@ def _render_page_content(page: str):
 
         # 🔹 Chargement + transformation du fichier Rating_API.xlsx (format long → large)
         try:
-            ratings_raw = pd.read_excel("/Users/beldjenna/Desktop/Rating Algo/Rating_API.xlsx")
+            ratings_raw = pd.read_excel(RATING_API_PATH)
         except Exception as e:
             st.error(f"Erreur lors du chargement des notations 2024 (Rating_API.xlsx) : {e}")
             return
