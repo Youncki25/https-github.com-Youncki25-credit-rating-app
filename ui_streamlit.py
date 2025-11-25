@@ -5,7 +5,7 @@ from typing import Optional, List, Dict
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt  # si besoin pour d'autres graphes plus tard
-
+ import base64
 from macro_graphs import render_macro_page
 
 # Import depuis les modules utilitaires
@@ -31,6 +31,8 @@ except Exception:
         "Vérifie le fichier et son emplacement."
     )
     st.stop()
+
+
 
 
 # ----------------------------------
@@ -97,9 +99,16 @@ def _render_page_content(page: str):
     st.caption("Créé par Younes Beldjenna, Matthew Er, Ines Bouchafaa, Marie-Glorieuse....")
     st.markdown("---")
 
-    # ------------------------------------------------------
-    # Présentation
-    # ------------------------------------------------------
+
+
+    pdf_path = "/Users/beldjenna/Desktop/Rating Algo/Rating__project-2.pdf"
+
+    def display_pdf(file_path):
+        with open(file_path, "rb") as f:
+            base64_pdf = base64.b64encode(f.read()).decode("utf-8")
+            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="900px" type="application/pdf"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
+
     if page == "Présentation":
         st.markdown("### 👋 Bienvenue dans notre dashboard de notation souveraine")
 
@@ -132,6 +141,10 @@ def _render_page_content(page: str):
             "et la construction du modèle interne. L’onglet **Contact** vous permet de joindre directement nos équipes pour "
             "toute question ou demande d’information."
         )
+        st.markdown("## 📄 Document de méthodologie")
+        st.write("Voici notre document PDF utilisé dans le projet :")
+        display_pdf(pdf_path)
+
 
     # ------------------------------------------------------
     # 📌 SIMULATION DE LA NOTE
@@ -370,34 +383,32 @@ Côté Fed, les marchés anticipaient encore récemment une troisième baisse de
         st.markdown("---")
 
         # 🔹 Mardi
-        st.markdown("### 📌 Mardi")
+        st.markdown("### 📌 Mardi 25 Novembre")
         st.write(
             "- 🇺🇸 **Confiance des consommateurs (US)** – indicateur clé du moral des ménages "
             "et de la dynamique de la demande."
         )
 
         # 🔹 Mercredi
-        st.markdown("### 📌 Mercredi")
+        st.markdown("### 📌 Mercredi 26 Novembre")
         st.write("- 🇦🇺 **CPI Australie** – inflation importante pour la RBA.")
         st.write("- 🇳🇿 **Décision de taux RBNZ**.")
         st.write("- 🇺🇸 **PIB US (2e estimation)**.")
         st.write("- 🇺🇸 **PCE core & headline** – inflation préférée de la Fed.")
 
         # 🔹 Jeudi
-        st.markdown("### 📌 Jeudi")
+        st.markdown("### 📌 Jeudi 27 Novembre")
         st.write("- 🇺🇸 **Thanksgiving (US)** – marchés américains quasi fermés.")
         st.write("- 🇯🇵 **Inflation Tokyo** – indicateur avancé.")
 
         # 🔹 Vendredi
-        st.markdown("### 📌 Vendredi")
+        st.markdown("### 📌 Vendredi 28 Novembre")
         st.write("- 🇩🇪 **Ventes au détail Allemagne**.")
         st.write("- 🇨🇭 **PIB Suisse**.")
         st.write("- 🇩🇪 **Inflation préliminaire Allemagne**.")
         st.write("- 🇨🇦 **PIB Canada**.")
 
-    # ------------------------------------------------------
-    # CONTACT
-    # ------------------------------------------------------
+
     elif page == "Contact":
         st.markdown("### Contact")
         st.write("Ajoutez ici les emails, liens, etc.")
