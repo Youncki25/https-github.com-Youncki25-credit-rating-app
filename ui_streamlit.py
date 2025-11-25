@@ -5,7 +5,8 @@ from typing import Optional, List, Dict
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt  # si besoin pour d'autres graphes plus tard
- import base64
+import base64
+
 from macro_graphs import render_macro_page
 
 # Import depuis les modules utilitaires
@@ -31,8 +32,6 @@ except Exception:
         "Vérifie le fichier et son emplacement."
     )
     st.stop()
-
-
 
 
 # ----------------------------------
@@ -99,16 +98,20 @@ def _render_page_content(page: str):
     st.caption("Créé par Younes Beldjenna, Matthew Er, Ines Bouchafaa, Marie-Glorieuse....")
     st.markdown("---")
 
-
-
     pdf_path = "/Users/beldjenna/Desktop/Rating Algo/Rating__project-2.pdf"
 
-    def display_pdf(file_path):
+    def display_pdf(file_path: str):
         with open(file_path, "rb") as f:
             base64_pdf = base64.b64encode(f.read()).decode("utf-8")
-            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="900px" type="application/pdf"></iframe>'
+            pdf_display = (
+                f'<iframe src="data:application/pdf;base64,{base64_pdf}" '
+                f'width="100%" height="900px" type="application/pdf"></iframe>'
+            )
             st.markdown(pdf_display, unsafe_allow_html=True)
 
+    # ------------------------------------------------------
+    # Présentation
+    # ------------------------------------------------------
     if page == "Présentation":
         st.markdown("### 👋 Bienvenue dans notre dashboard de notation souveraine")
 
@@ -141,10 +144,10 @@ def _render_page_content(page: str):
             "et la construction du modèle interne. L’onglet **Contact** vous permet de joindre directement nos équipes pour "
             "toute question ou demande d’information."
         )
+
         st.markdown("## 📄 Document de méthodologie")
         st.write("Voici notre document PDF utilisé dans le projet :")
         display_pdf(pdf_path)
-
 
     # ------------------------------------------------------
     # 📌 SIMULATION DE LA NOTE
@@ -408,7 +411,9 @@ Côté Fed, les marchés anticipaient encore récemment une troisième baisse de
         st.write("- 🇩🇪 **Inflation préliminaire Allemagne**.")
         st.write("- 🇨🇦 **PIB Canada**.")
 
-
+    # ------------------------------------------------------
+    # CONTACT
+    # ------------------------------------------------------
     elif page == "Contact":
         st.markdown("### Contact")
         st.write("Ajoutez ici les emails, liens, etc.")
