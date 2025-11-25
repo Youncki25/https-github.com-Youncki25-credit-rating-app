@@ -51,11 +51,19 @@ def _find_existing_file(candidates):
     return candidates[0]
 
 
-# On teste plusieurs emplacements possibles
-RATING_API_PATH = _find_existing_file([
-    os.path.join(BASE_DIR, "Rating_API.xlsx"),
-    os.path.join(BASE_DIR, "data", "Rating_API.xlsx"),
-])
+import glob  # ajoute cet import en haut du fichier, avec les autres
+
+# ...
+
+# Cherche automatiquement un PDF qui commence par "Rating_" dans le dossier du projet
+pdf_candidates = glob.glob(os.path.join(BASE_DIR, "Rating*.pdf"))
+
+if pdf_candidates:
+    PDF_PATH = pdf_candidates[0]  # on prend le premier trouvé
+else:
+    PDF_PATH = None
+
+
 
 PDF_PATH = _find_existing_file([
     os.path.join(BASE_DIR, "Rating_project-2.pdf"),
@@ -176,17 +184,21 @@ def _render_page_content(page: str):
         st.markdown("## 📄 Document de méthodologie")
         st.write("Téléchargez ici notre document PDF utilisé dans le projet :")
 
-        try:
-            with open(PDF_PATH, "rb") as pdf_file:
-                PDF_BYTES = pdf_file.read()
+        if PDF_PATH is None:
+            st.error("Aucun fichier PDF de méthodologie trouvé dans le dossier du projet.")
+        else:
+            try:
+                with open(PDF_PATH, "rb") as pdf_file:
+                    PDF_BYTES = pdf_file.read()
                 st.download_button(
                     label="📥 Télécharger le PDF",
                     data=PDF_BYTES,
                     file_name="Rating_Project.pdf",
                     mime="application/pdf"
                 )
-        except Exception as e:
-            st.error(f"Impossible de charger le PDF : {e}")
+            except Exception as e:
+                st.error(f"Impossible de charger le PDF : {e}")
+
         
 
     # ------------------------------------------------------
