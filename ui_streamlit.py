@@ -74,7 +74,7 @@ def _render_sidebar() -> str:
     st.sidebar.markdown("### Menu")
     page = st.sidebar.radio(
         "Navigation",
-        ["Présentation", "Simulation de la note", "Macroéconomie", "Point économique", "Contact"],
+        ["Présentation", "Simulation de la note", "Macroéconomie", "Calendrier", "Contact"],
         index=1,
     )
     st.sidebar.markdown("---")
@@ -182,6 +182,49 @@ def _render_page_content(page: str):
 
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
+        # -----------------------------
+        # 📝 Récap analystes (textes pour certains pays)
+        # -----------------------------
+        analyst_notes = {
+            "ECU": """L’Équateur reste confronté à un environnement macroéconomique tendu, malgré sa dollarisation qui stabilise l’inflation. La croissance est modeste, autour de 1–2 %, freinée par l’incertitude politique, la faiblesse de l’investissement et l’augmentation de l’insécurité intérieure. L’inflation demeure très faible (≈ 2 %), ce qui est typique des économies dollarisées, mais cela ne suffit pas à compenser les pressions structurelles sur l’activité.
+
+Sur le plan budgétaire, la situation reste fragile : le déficit public tourne autour de 3–4 % du PIB, et la dette dépasse 60 % du PIB, dans un contexte d’accès limité aux marchés internationaux. Le gouvernement dépend largement de financements multilatéraux (FMI, BID) et de recettes liées au pétrole, un secteur sous pression après plusieurs décisions de réduction ou suspension d’extraction. L’absence de politique monétaire autonome — due à la dollarisation — rend l’ajustement économique entièrement dépendant de la discipline budgétaire et des réformes structurelles.
+
+Globalement, l’Équateur présente une inflation faible mais une croissance atone, une situation budgétaire délicate et une exposition élevée aux risques politiques et pétroliers, ce qui pèse sur la stabilité macroéconomique et la notation souveraine.""",
+            "EGY": """L’Égypte traverse une période économique très délicate, marquée par une forte inflation, une pénurie de devises et plusieurs dévaluations successives de la livre depuis 2022. La croissance s’est nettement affaiblie, désormais proche de 3 %, sous l’effet du recul de la consommation et de tensions persistantes sur les importations. L’inflation reste extrêmement élevée — longtemps au-dessus de 30 % — même si elle montre récemment des signes de modération grâce au resserrement monétaire et au ralentissement de la demande.
+
+La Banque centrale maintient une politique très restrictive, avec un taux directeur à 27,25 %, l’un des plus élevés du monde, afin de stabiliser la monnaie et d’éviter une nouvelle spirale inflationniste. Sur le plan budgétaire, la situation demeure fragile : le déficit dépasse 6 % du PIB, la dette publique est élevée (près de 95 % du PIB) et la charge d’intérêt absorbe une part croissante du budget. Le pays dépend fortement des financements extérieurs, notamment du FMI, du Golfe et des euro-obligations, pour stabiliser sa balance des paiements.
+
+Globalement, l’Égypte reste en situation de stabilisation sous contrainte, avec un ajustement monétaire et budgétaire sévère mais indispensable pour restaurer la confiance et réduire les déséquilibres macro-financiers.""",
+            "VNM": """L’économie vietnamienne reste l’une des plus dynamiques d’Asie du Sud-Est, avec une croissance autour de 5–6 %, tirée par les exportations, la fabrication électronique et l’investissement direct étranger. Le pays bénéficie encore du mouvement de relocalisation industrielle hors de Chine, même si le ralentissement américain et européen pèse temporairement sur les ventes extérieures. L’inflation demeure maîtrisée, évoluant autour de 3–3,5 %, ce qui permet à la Banque d’État du Vietnam de maintenir une politique monétaire relativement accommodante pour soutenir l’activité.
+
+Sur le plan budgétaire, la situation reste globalement stable : le déficit tourne autour de 3–4 % du PIB, et la dette publique, proche de 40 % du PIB, reste modérée pour un émergent. Le gouvernement continue de renforcer l’investissement dans les infrastructures et de simplifier l’environnement réglementaire pour attirer davantage de capitaux étrangers. Globalement, le Vietnam combine une croissance robuste, une inflation contenue et une trajectoire budgétaire maîtrisée, même si l’économie reste sensible au cycle mondial et à la demande extérieure.""",
+            "GBR": """L’économie britannique reste fragile après plusieurs années de chocs successifs : Brexit, inflation importée, tensions sur l’énergie et resserrement monétaire rapide. La croissance demeure très faible, autour de 0,5–1 %, avec une demande intérieure encore contrainte par la baisse du pouvoir d’achat et un marché immobilier en net ralentissement. L’inflation, qui avait dépassé 11 % en 2022, a fortement reflué mais reste proche de 3–3,5 %, au-dessus de la cible de la Banque d’Angleterre.
+
+La BoE maintient des taux élevés, avec un Bank Rate à 5,25 %, et ne prévoit un assouplissement que lorsque l’inflation convergera plus clairement vers 2 %. Sur le plan budgétaire, le Royaume-Uni affiche un déficit encore conséquent, proche de 4–5 % du PIB, et une dette publique supérieure à 100 % du PIB, ce qui limite les marges de manœuvre fiscales du gouvernement.
+
+L’environnement économique reste donc complexe : croissance faible, inflation encore trop élevée, et paysage politique incertain, même si la désinflation progressive crée les conditions d’un possible assouplissement monétaire en 2025.""",
+            "JAP": """L’économie japonaise évolue dans un contexte de croissance modeste mais stable, autour de 1 %, freinée par la faiblesse de la consommation et les tensions persistantes sur le marché du travail. L’inflation, longtemps trop basse, s’est installée durablement au-dessus de 2 %, ce qui marque un changement structurel après des décennies de déflation. La Banque du Japon a commencé sa normalisation graduelle : après avoir abandonné le contrôle de la courbe des taux, elle maintient désormais un taux directeur légèrement positif, autour de 0–0,25 %, tout en signalant que tout resserrement supplémentaire sera très progressif afin de ne pas fragiliser l’activité.
+
+Sur le plan budgétaire, la situation reste délicate : la dette publique dépasse 250 % du PIB, la plus élevée du monde développé, et les pressions de dépense augmentent (vieillissement, santé, retraites). Malgré cette dette massive, le Japon bénéficie encore de coûts d’emprunt très faibles grâce au rôle stabilisateur de la BoJ et à une forte détention domestique de la dette. Globalement, le pays avance lentement vers une normalisation monétaire, mais reste confronté à un potentiel de croissance faible et à une situation budgétaire structurellement tendue.""",
+            "GRE": """La Grèce poursuit sa normalisation économique après une décennie de crise. La croissance reste solide pour un pays de la zone euro, autour de 2–2,5 %, portée par le tourisme, les investissements européens et une amélioration progressive du climat financier. L’inflation a nettement reculé, se situant autour de 3 %, ce qui a permis un allègement des pressions sur les ménages et les entreprises. Sur le plan budgétaire, la Grèce affiche désormais un excédent primaire, tandis que la dette publique — encore très élevée en niveau — suit une trajectoire clairement descendante grâce à une forte croissance nominale et des taux d’emprunt modérés.
+
+La politique monétaire dépend de la BCE : les taux directeurs de la zone euro ont commencé à reculer en 2024–2025, réduisant progressivement le coût du financement pour Athènes. Grâce à cette amélioration macroéconomique et budgétaire, la Grèce bénéficie d’une meilleure perception des marchés et a récupéré sa notation « investment grade » chez plusieurs agences. Malgré tout, le pays reste sensible à la conjoncture européenne et au ralentissement de la demande extérieure.""",
+            "ZAF": """L’Afrique du Sud reste confrontée à une croissance très faible, limitée autour de 0,5–1 %, en raison des contraintes structurelles persistantes dans l’énergie (load-shedding), les transports et la sécurité. L’inflation a nettement ralenti mais évolue encore autour de 5 %, soit près de la borne haute de la cible de la Banque centrale. Dans ce contexte, la SARB maintient un taux directeur élevé à 8,25 %, ce qui implique un prime lending rate de 11,75 %, l’un des plus hauts parmi les grands émergents, reflétant une politique monétaire délibérément restrictive.
+
+Sur le plan budgétaire, le déficit demeure élevé (≈ 4–5 % du PIB) et la dette publique dépasse 70 % du PIB, aggravée par les difficultés financières des entreprises publiques comme Eskom et Transnet. Malgré ces déséquilibres, le cadre macroéconomique reste relativement stable, mais la faiblesse chronique de la croissance et les risques budgétaires continuent de peser lourdement sur la trajectoire économique et la notation souveraine du pays.""",
+            "ARG": """L’Argentine traverse toujours une phase d’ajustement macroéconomique extrêmement profonde sous la présidence de Javier Milei. Après l’hyperinflation de 2023–2024, les prix ont commencé à décélérer mais restent à un niveau exceptionnellement élevé, autour de 80–100 % en glissement annuel, maintenant l’économie dans un état permanent de tension sociale et de perte de pouvoir d’achat. L’activité a plongé au premier semestre 2025 sous l’effet du choc fiscal et monétaire, avec une contraction du PIB proche de –3 %, même si certains indicateurs avancés suggèrent un début de stabilisation.
+
+Sur le plan budgétaire, le gouvernement poursuit une politique de déficit primaire proche de zéro, via un ajustement brutal des dépenses publiques, la suppression de subventions énergétiques et une réduction massive des transferts aux provinces. La consolidation est réelle mais au prix d’un fort coût social. La dette reste tendue, notamment en devises, et le pays reste exclu des marchés internationaux.
+
+La politique monétaire reste ultra-restrictive : les taux directeurs demeurent très élevés en termes réels malgré plusieurs révisions techniques du régime monétaire. La Banque centrale cherche à restaurer la crédibilité après des années de financement monétaire du déficit. Le gouvernement maintient un plan de transition vers la dollarisation, même si la mise en œuvre est progressive et dépend d’une stabilisation durable des réserves.
+
+En résumé, l’Argentine est engagée dans une stabilisation douloureuse : l’inflation baisse mais reste extrême, la croissance est négative, l’ajustement budgétaire est massif et la visibilité reste faible faute d’accès aux marchés.""",
+            "USA": """L’économie américaine reste résiliente, avec une croissance supérieure à celle des autres pays développés, même si la dynamique ralentit légèrement. L’inflation poursuit son mouvement de désinflation mais reste bloquée autour de 3 %, un niveau trop élevé pour permettre une normalisation rapide. Le paysage économique est actuellement brouillé par le shutdown partiel du gouvernement fédéral, qui a déjà entraîné le report de plusieurs statistiques clés, compliquant l’évaluation de la conjoncture. Sur le plan budgétaire, le déficit demeure massif (≈ 6 % du PIB) et la charge d’intérêt continue de peser lourdement dans un contexte de dette record.
+
+Côté Fed, les marchés anticipaient encore récemment une troisième baisse de taux en décembre, qui aurait fait passer le corridor des Fed Funds de 3,75–4,00 % à 3,50–3,75 %. Mais la probabilité de cette baisse a nettement reculé ces dernières semaines : plusieurs membres du FOMC ont jugé que l’inflation était trop persistante pour assouplir davantage la politique monétaire immédiatement. Le comité semble désormais s’orienter vers une pause, dans l’attente d’une nouvelle série de données fiables une fois le shutdown levé."""
+        }
+
         methodology = st.selectbox(
             "Méthodologie",
             [
@@ -286,6 +329,17 @@ def _render_page_content(page: str):
                             f"Catégorie interne : {cat} • Équivalent lettre : {letter}"
                         )
 
+        # ------------------------------------------------------------------
+        # 📝 Affichage du récap analystes
+        #    → seulement si Échelle interne + pays dans le dictionnaire
+        # ------------------------------------------------------------------
+        if methodology == "Échelle interne":
+            code_pays = str(pays).strip()
+            recap = analyst_notes.get(code_pays)
+            if recap:
+                st.markdown("#### 📝 Analyse des analystes")
+                st.write(recap)
+
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ------------------------------------------------------
@@ -297,9 +351,9 @@ def _render_page_content(page: str):
         render_macro_page()
 
     # ------------------------------------------------------
-    # POINT ÉCONOMIQUE
+    # CALENDRIER ÉCONOMIQUE
     # ------------------------------------------------------
-    elif page == "Point économique":
+    elif page == "Calendrier":
         st.markdown("## 📅 Agenda économique de la semaine")
         st.markdown(
             "Principaux événements macroéconomiques de la semaine, inspirés du "
@@ -333,15 +387,6 @@ def _render_page_content(page: str):
         st.write("- 🇨🇭 **PIB Suisse**.")
         st.write("- 🇩🇪 **Inflation préliminaire Allemagne**.")
         st.write("- 🇨🇦 **PIB Canada**.")
-
-        # 🔹 Week-end
-        st.markdown("### 📌 Week-end")
-        st.write("- 🇨🇳 **PMI manufacturier & non manufacturier Chine**.")
-
-        st.markdown("---")
-        st.caption(
-            "⚠️ Les dates exactes peuvent varier — toujours vérifier le calendrier Investing en temps réel."
-        )
 
     # ------------------------------------------------------
     # CONTACT
