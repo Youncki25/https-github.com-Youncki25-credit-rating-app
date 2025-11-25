@@ -61,6 +61,31 @@ PDF_PATH = _find_existing_file([
     os.path.join(BASE_DIR, "Rating_project-2.pdf"),
     os.path.join(BASE_DIR, "docs", "Rating_project-2.pdf"),
 ])
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _find_existing_file(candidates):
+    """
+    Retourne le premier chemin existant dans la liste,
+    sinon le premier chemin de la liste.
+    """
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return candidates[0]
+
+
+# ➜ chemin du fichier Excel de notations
+RATING_API_PATH = _find_existing_file([
+    os.path.join(BASE_DIR, "Rating_API.xlsx"),
+    os.path.join(BASE_DIR, "data", "Rating_API.xlsx"),
+])
+
+# ➜ chemin du PDF de méthodo
+PDF_PATH = _find_existing_file([
+    os.path.join(BASE_DIR, "Rating_project-2.pdf"),
+    os.path.join(BASE_DIR, "docs", "Rating_project-2.pdf"),
+])
 
 
 DARK_CSS = """
