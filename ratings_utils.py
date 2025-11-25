@@ -81,10 +81,6 @@ def rating_to_ordinal(r: Optional[str]) -> Optional[int]:
     return None
 
 
-# --------------------------------------------------------------------
-# 📌 ÉCHELLE INTERNE : 21 = AAA, 20 = AA+, 19 = AA, …, 1 = C
-# --------------------------------------------------------------------
-
 INTERNAL_RATING_MAP = {
     21: "AAA",
     20: "AA+",
@@ -109,7 +105,7 @@ INTERNAL_RATING_MAP = {
     1: "C",
 }
 
-# mapping inverse : lettre → score interne
+
 INTERNAL_RATING_MAP_INV = {v: k for k, v in INTERNAL_RATING_MAP.items()}
 
 
@@ -151,9 +147,7 @@ def external_rating_to_internal_score(r: Optional[str], agency: Optional[str] = 
     return INTERNAL_RATING_MAP_INV.get(r.upper())
 
 
-# --------------------------------------------------------------------
-# 📊 Chargement des ratings agences
-# --------------------------------------------------------------------
+
 
 @st.cache_data
 def load_ratings_2024(path: str = "rating2.xlsx"):

@@ -66,8 +66,9 @@ def render_profiles_panel():
                         "<div class='card small'>Image manquante</div>",
                         unsafe_allow_html=True,
                     )
-            with c2:
-                st.markdown(
-                    f"**{prof.name}**<br/>{prof.role}",
+                    with c2:
+                        st.markdown(
+                        f"<b>{prof.name}</b><br/>{prof.role}",
                     unsafe_allow_html=True,
-                )
+                                                )
+

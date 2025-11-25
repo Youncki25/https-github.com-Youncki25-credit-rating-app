@@ -35,10 +35,32 @@ except Exception:
 
 
 # ----------------------------------
-# 📂 Chemin du fichier Rating_API.xlsx (relatif au script)
+# 📂 Chemins relatifs (compatibles local + Streamlit Cloud)
 # ----------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RATING_API_PATH = os.path.join(BASE_DIR, "Rating_API.xlsx")
+
+
+def _find_existing_file(candidates):
+    """
+    Retourne le premier chemin existant dans la liste,
+    sinon le premier chemin de la liste.
+    """
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return candidates[0]
+
+
+# On teste plusieurs emplacements possibles
+RATING_API_PATH = _find_existing_file([
+    os.path.join(BASE_DIR, "Rating_API.xlsx"),
+    os.path.join(BASE_DIR, "data", "Rating_API.xlsx"),
+])
+
+PDF_PATH = _find_existing_file([
+    os.path.join(BASE_DIR, "Rating__project-2.pdf"),
+    os.path.join(BASE_DIR, "docs", "Rating__project-2.pdf"),
+])
 
 
 # ----------------------------------
@@ -95,19 +117,25 @@ def _render_sidebar() -> str:
 def _render_page_content(page: str):
 
     st.markdown("# 💹  AGENCE DE NOTATION MYMY'S")
-    st.caption("Créé par Younes Beldjenna, Matthew Er, Ines Bouchafaa, Marie-Glorieuse....")
+    st.caption("Créé par Younes Beldjenna, Matthew Er, Ines Bouchafaa, Marie-Glorieuse Ndjoli bofambi")
     st.markdown("---")
 
-    pdf_path = "/Users/beldjenna/Desktop/Rating Algo/Rating__project-2.pdf"
-
+    # ========= Fonction utilitaire pour afficher le PDF ========= #
     def display_pdf(file_path: str):
-        with open(file_path, "rb") as f:
-            base64_pdf = base64.b64encode(f.read()).decode("utf-8")
+        try:
+            with open(file_path, "rb") as f:
+                base64_pdf = base64.b64encode(f.read()).decode("utf-8")
             pdf_display = (
                 f'<iframe src="data:application/pdf;base64,{base64_pdf}" '
                 f'width="100%" height="900px" type="application/pdf"></iframe>'
             )
             st.markdown(pdf_display, unsafe_allow_html=True)
+        except FileNotFoundError:
+            st.error(
+                "📄 Impossible de trouver le PDF de méthodologie. "
+                "Vérifie que `Rating__project-2.pdf` est bien dans le repo "
+                "et au bon endroit (racine ou dossier docs/)."
+            )
 
     # ------------------------------------------------------
     # Présentation
@@ -140,17 +168,29 @@ def _render_page_content(page: str):
             "Nous publions aussi un **point macroéconomique hebdomadaire**, réalisé par nos équipes, afin d’offrir un suivi "
             "régulier de l’actualité économique internationale.\n\n"
 
-            "Enfin, dans l’onglet **Modèle**, vous pourrez consulter notre document méthodologique détaillant notre démarche "
+            "Enfin, vous trouvere ci-dessous, notre document méthodologique détaillant notre démarche "
             "et la construction du modèle interne. L’onglet **Contact** vous permet de joindre directement nos équipes pour "
             "toute question ou demande d’information."
         )
-
+        
         st.markdown("## 📄 Document de méthodologie")
-        st.write("Voici notre document PDF utilisé dans le projet :")
-        display_pdf(pdf_path)
+        st.write("Téléchargez ici notre document PDF utilisé dans le projet :")
+
+        try:
+            with open(PDF_PATH, "rb") as pdf_file:
+                PDF_BYTES = pdf_file.read()
+                st.download_button(
+                    label="📥 Télécharger le PDF",
+                    data=PDF_BYTES,
+                    file_name="Rating_Project.pdf",
+                    mime="application/pdf"
+                )
+        except Exception as e:
+            st.error(f"Impossible de charger le PDF : {e}")
+        
 
     # ------------------------------------------------------
-    # 📌 SIMULATION DE LA NOTE
+    # SIMULATION DE LA NOTE
     # ------------------------------------------------------
     elif page == "Simulation de la note":
 
@@ -160,11 +200,15 @@ def _render_page_content(page: str):
             "agences ainsi que la note calculée par notre modèle interne."
         )
 
-        # 🔹 Chargement + transformation du fichier Rating_API.xlsx (format long → large)
+        #  Chargement + transformation du fichier Rating_API.xlsx (format long → large)
         try:
             ratings_raw = pd.read_excel(RATING_API_PATH)
         except Exception as e:
-            st.error(f"Erreur lors du chargement des notations 2024 (Rating_API.xlsx) : {e}")
+            st.error(
+                "Erreur lors du chargement des notations 2024 (Rating_API.xlsx) : "
+                f"{e}\n\n"
+                f"Chemin testé : `{RATING_API_PATH}`"
+            )
             return
 
         # On garde uniquement l'année 2024
@@ -195,8 +239,6 @@ def _render_page_content(page: str):
         ratings_2024.columns = ratings_2024.columns.astype(str).str.strip()
         ratings_2024.index = ratings_2024.index.astype(str).str.strip()
 
-        country_col = "Code"
-
         internal_ratings = load_internal_ratings()
 
         if ratings_2024 is None or ratings_2024.empty:
@@ -206,7 +248,7 @@ def _render_page_content(page: str):
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
         # -----------------------------
-        # 📝 Récap analystes (textes pour certains pays)
+        #  Récap analystes (textes pour certains pays)
         # -----------------------------
         analyst_notes = {
             "ECU": """L’Équateur reste confronté à un environnement macroéconomique tendu, malgré sa dollarisation qui stabilise l’inflation. La croissance est modeste, autour de 1–2 %, freinée par l’incertitude politique, la faiblesse de l’investissement et l’augmentation de l’insécurité intérieure. L’inflation demeure très faible (≈ 2 %), ce qui est typique des économies dollarisées, mais cela ne suffit pas à compenser les pressions structurelles sur l’activité.
@@ -259,7 +301,7 @@ Côté Fed, les marchés anticipaient encore récemment une troisième baisse de
         )
 
         # -----------------------------
-        # 🔎 Liste des pays dans la selectbox
+        #  Liste des pays dans la selectbox
         #    → uniquement ceux qui ont une NOTE INTERNE
         # -----------------------------
         if internal_ratings is not None and "Code" in internal_ratings.columns:
@@ -353,7 +395,7 @@ Côté Fed, les marchés anticipaient encore récemment une troisième baisse de
                         )
 
         # ------------------------------------------------------------------
-        # 📝 Affichage du récap analystes
+        #  Affichage du récap analystes
         #    → seulement si Échelle interne + pays dans le dictionnaire
         # ------------------------------------------------------------------
         if methodology == "Échelle interne":
@@ -416,11 +458,20 @@ Côté Fed, les marchés anticipaient encore récemment une troisième baisse de
     # ------------------------------------------------------
     elif page == "Contact":
         st.markdown("### Contact")
-        st.write("Ajoutez ici les emails, liens, etc.")
+
+        contacts = {
+            "Matthew": "matthewer14@gmail.com",
+            "Ndjolo Glory": "ndjologlory@gmail.com",
+            "Inès Bouchafaa": "ines.bouchafaa@gmail.com",
+            "Younes Beldjenna": "younes.beldjenna25@gmail.com",
+        }
+        for name, email in contacts.items():
+            st.write(f"**{name}** : {email}")
+
 
 
 # --------------------------------------------------------------------
-# 🚀 Lancement dashboard
+#  Lancement dashboard
 # --------------------------------------------------------------------
 def launch_dashboard():
     # CSS global
