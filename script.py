@@ -2,17 +2,18 @@ from __future__ import annotations
 from typing import List, Dict, Optional
 import base64, os, uuid
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
-        "name": " Younes Beldjenna",
+        "name": "Younes Beldjenna",
         "role": "Senior Credit Analyst — US Market",
-        "photo": "Photo/Younes Beldjenna Analyste Senior .PNG",
+        "photo": "Photo/Younes Beldjenna Analyste Senior.jpg",
     },
     {
         "name": "Matthew Er",
         "role": "Senior Credit Analyst — APAC Market",
-        "photo": "Photo/matthew Er .jpg",
+        "photo": "Photo/matthew Er.jpg",
     },
     {
         "name": "Inès Bouchafaa",
@@ -22,47 +23,53 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Marie-Gloriseuse Ndjoli bofambi",
         "role": "Senior Credit Analyst - LATAM Market",
-        "photo": "Photo/marie.png",
+        "photo": "Photo/marie.jpg",
     },
     {
         "name": "Sébastien Lecornu",
         "role": "FX & Macro Analyst",
-        "photo": "Photo/sebastien.jpeg",
+        "photo": "Photo/sebastien",   # pas d’extension dans ton dossier
     },
     {
         "name": "Emmanuel Macron",
         "role": "High Yield Analyst",
-        "photo": "Photo/manuel.jpeg"
+        "photo": "Photo/manuel",      # pas d’extension
     },
     {
         "name": "Gabriel Attal",
         "role": "Investment Grade Analyst",
-        "photo": "Photo/Gabriel.jpeg",
+        "photo": "Photo/Gabriel",     # pas d’extension
     },
     {
         "name": "François Bayrou",
         "role": "Quant Researcher",
-        "photo": "Photo/franois.webp",
+        "photo": "Photo/franois.webp",  # comme sur ta capture (sans c)
     },
     {
         "name": "Michel Barnier",
         "role": "Structured Finance Analyst",
-        "photo": "Photo/michel.jpeg",
+        "photo": "Photo/michel",      # pas d’extension
     },
 ]
 
 def _img_to_b64(path: str) -> Optional[str]:
-    if not path or not os.path.exists(path):
+    if not path:
         return None
+
+    full_path = os.path.join(BASE_DIR, path)
+    if not os.path.exists(full_path):
+        print("❌ Image introuvable :", full_path)
+        return None
+
     try:
-        with open(path, "rb") as f:
+        with open(full_path, "rb") as f:
             return base64.b64encode(f.read()).decode()
-    except Exception:
+    except Exception as e:
+        print("⚠️ Erreur lecture image :", full_path, "—", e)
         return None
 
 
 def load_analysts() -> List[Dict]:
-    """Charge et retourne la liste d'analystes avec leurs images encodées en base64."""
     analysts: List[Dict] = []
     for a in ANALYSTS_CONFIG:
         name = (a.get("name") or "Analyste").strip()
@@ -81,9 +88,6 @@ def load_analysts() -> List[Dict]:
     return analysts
 
 
-# ─────────────────────────────────────────────────────────
-# Test console (facultatif). Si tu utilises main.py, ne lance pas ce fichier.
-# ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     data = load_analysts()
     print(f"{len(data)} analystes chargés :")
