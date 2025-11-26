@@ -2,13 +2,7 @@ from __future__ import annotations
 from typing import List, Dict, Optional
 import base64, os, uuid
 
-# ─────────────────────────────────────────────────────────
-# CONFIGURATION — 10 analystes (modifiable par toi)
-# Clés attendues par main.py (et par load_analysts ci-dessous) :
-#   name : Nom affiché
-#   role : Poste (apparaît en gras côté UI)
-#   photo: Chemin de la photo (PNG/JPG). Laisse "" si pas d'image.
-# ─────────────────────────────────────────────────────────
+
 ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": " Younes Beldjenna",
@@ -57,9 +51,6 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     },
 ]
 
-# ─────────────────────────────────────────────────────────
-# Utilitaire optionnel (pour tester script.py tout seul)
-# ─────────────────────────────────────────────────────────
 def _img_to_b64(path: str) -> Optional[str]:
     if not path or not os.path.exists(path):
         return None
