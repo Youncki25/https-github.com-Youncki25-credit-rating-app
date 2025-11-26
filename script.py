@@ -13,7 +13,7 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Matthew Er",
         "role": "Senior Credit Analyst — APAC Market",
-        "photo": "Photo/matthew Er .jpg",   # l'espace AVANT .jpg est réel !
+        "photo": "Photo/matthew Er .jpg",
     },
     {
         "name": "Inès Bouchafaa",
@@ -23,7 +23,7 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Marie-Gloriseuse Ndjoli bofambi",
         "role": "Senior Credit Analyst - LATAM Market",
-        "photo": "Photo/marie.jpg.png",  # double extension !!!
+        "photo": "Photo/marie.jpg.png",
     },
     {
         "name": "Sébastien Lecornu",
@@ -43,7 +43,7 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "François Bayrou",
         "role": "Quant Researcher",
-        "photo": "Photo/franois.webp",  # c'est bien franois.webp
+        "photo": "Photo/franois.webp",
     },
     {
         "name": "Michel Barnier",
@@ -51,6 +51,7 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
         "photo": "Photo/michel.jpeg",
     },
 ]
+
 
 
 def _img_to_b64(path: str) -> Optional[str]:
