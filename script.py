@@ -8,12 +8,12 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Younes Beldjenna",
         "role": "Senior Credit Analyst — US Market",
-        "photo": "Photo/Younes Beldjenna Analyste Senior.jpg",
+        "photo": "Photo/Younes Beldjenna Analyste Senior.jpg.png",
     },
     {
         "name": "Matthew Er",
         "role": "Senior Credit Analyst — APAC Market",
-        "photo": "Photo/matthew Er.jpg",
+        "photo": "Photo/matthew Er .jpg",   # l'espace AVANT .jpg est réel !
     },
     {
         "name": "Inès Bouchafaa",
@@ -23,34 +23,35 @@ ANALYSTS_CONFIG: List[Dict[str, str]] = [
     {
         "name": "Marie-Gloriseuse Ndjoli bofambi",
         "role": "Senior Credit Analyst - LATAM Market",
-        "photo": "Photo/marie.jpg",
+        "photo": "Photo/marie.jpg.png",  # double extension !!!
     },
     {
         "name": "Sébastien Lecornu",
         "role": "FX & Macro Analyst",
-        "photo": "Photo/sebastien",   # pas d’extension dans ton dossier
+        "photo": "Photo/sebastien.jpeg",
     },
     {
         "name": "Emmanuel Macron",
         "role": "High Yield Analyst",
-        "photo": "Photo/manuel",      # pas d’extension
+        "photo": "Photo/manuel.jpeg",
     },
     {
         "name": "Gabriel Attal",
         "role": "Investment Grade Analyst",
-        "photo": "Photo/Gabriel",     # pas d’extension
+        "photo": "Photo/Gabriel.jpeg",
     },
     {
         "name": "François Bayrou",
         "role": "Quant Researcher",
-        "photo": "Photo/franois.webp",  # comme sur ta capture (sans c)
+        "photo": "Photo/franois.webp",  # c'est bien franois.webp
     },
     {
         "name": "Michel Barnier",
         "role": "Structured Finance Analyst",
-        "photo": "Photo/michel",      # pas d’extension
+        "photo": "Photo/michel.jpeg",
     },
 ]
+
 
 def _img_to_b64(path: str) -> Optional[str]:
     if not path:
